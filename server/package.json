@@ -1,0 +1,19 @@
+{
+  "name": "watch-party-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon index.js",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "latest",
+    "express": "latest",
+    "socket.io": "latest",
+    "nanoid": "latest"
+  },
+  "devDependencies": {
+    "nodemon": "latest"
+  }
+}

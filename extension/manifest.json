@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "SyncWatch Web Video Sync",
+  "version": "1.0.0",
+  "description": "Detects HTML5 video on websites and synchronizes playback through a SyncWatch room.",
+  "permissions": ["storage", "tabs", "activeTab"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "SyncWatch Web Sync",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ]
+}
