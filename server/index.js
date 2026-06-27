@@ -1,5 +1,7 @@
 import express from "express";
 import http from "http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import { Server } from "socket.io";
 import { nanoid } from "nanoid";
@@ -7,8 +9,10 @@ import { streamExtractor } from "./streamExtractor.js";
 
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
 const PORT = process.env.PORT || 5000;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CLIENT_DIST = path.resolve(__dirname, "../client/dist");
 
-const allowedOrigins = [CLIENT_ORIGIN, "http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"];
+const allowedOrigins = [CLIENT_ORIGIN, process.env.RENDER_EXTERNAL_URL, "http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"].filter(Boolean);
 const allowOrigin = (origin, callback) => {
   const allowed = !origin || allowedOrigins.includes(origin) || origin.startsWith("chrome-extension://");
   callback(allowed ? null : new Error("Origin not allowed"), allowed);
@@ -420,6 +424,16 @@ io.on("connection", (socket) => {
     }
   });
 });
+
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(CLIENT_DIST));
+  app.use((req, res, next) => {
+    if (req.method === "GET" && req.accepts("html")) {
+      return res.sendFile(path.join(CLIENT_DIST, "index.html"));
+    }
+    next();
+  });
+}
 
 // Nodemon watches this entry point during local development.
 server.listen(PORT, () => {

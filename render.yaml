@@ -1,0 +1,15 @@
+services:
+  - type: web
+    runtime: node
+    name: syncwatch
+    repo: https://github.com/pedznuque/syncwatch.git
+    branch: main
+    region: singapore
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
