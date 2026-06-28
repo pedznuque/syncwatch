@@ -45,7 +45,7 @@ export default function MediaPanel({ roomId, state, onScreenShare, username, isH
   const playerContainerRef = useRef(null);
   const ignoreRemoteRef = useRef(false);
   
-  const [mode, setMode] = useState(state?.mode || "direct-video");
+  const [mode, setMode] = useState(state?.mode || "web");
   const [videoUrl, setVideoUrl] = useState(state?.videoUrl || "");
   const [youtubeId, setYoutubeId] = useState(state?.youtubeId || "");
   const [webUrl, setWebUrl] = useState(state?.externalUrl || "");
@@ -377,13 +377,13 @@ export default function MediaPanel({ roomId, state, onScreenShare, username, isH
       </div>
 
       <div className="mode-tabs segmented web-mode-tabs">
-        {["direct-video", "youtube", "web"].map(m => (
+        {["web", "youtube", "direct-video"].map(m => (
           <button
             key={m}
             className={activeMode === m ? "active" : ""}
             onClick={() => setMode(m)}
           >
-            {m === "direct-video" ? "Direct" : m === "youtube" ? "YouTube" : <><Globe2 size={16} /> Web</>}
+            {m === "direct-video" ? "Direct" : m === "youtube" ? "YouTube" : <><Globe2 size={16} /> Web · Best</>}
           </button>
         ))}
       </div>
@@ -429,12 +429,12 @@ export default function MediaPanel({ roomId, state, onScreenShare, username, isH
             </div>
             <div className="web-sync-actions">
               <a href={webState?.url || webUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} /> Open website</a>
-              <button className="primary" onClick={onScreenShare}>Share tab to room</button>
+              <button onClick={onScreenShare}>Fallback: share tab</button>
               <button className="danger" onClick={clearPlayer}><X size={16} /> Remove</button>
             </div>
             <div className="extension-setup">
               <Puzzle size={20} />
-              <div><strong>Companion extension</strong><span>Load the <code>extension</code> folder in <code>chrome://extensions</code>, enable Developer mode, then enter this room code.</span></div>
+              <div><strong>Recommended: companion extension</strong><span>Each friend plays the original stream locally for full quality. Load the <code>extension</code> folder in <code>chrome://extensions</code>, then use this room code.</span></div>
               <button onClick={copyRoomId}><Copy size={15} /> {roomId}</button>
             </div>
           </div>

@@ -112,7 +112,7 @@ export default function Room() {
                     <path d="M23 7l-7 5 7 5V7z"></path>
                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
                   </svg>
-                  {screenShare ? `View ${screenShare.username}'s Screen` : "Start Screen Share"}
+                  {screenShare ? `View ${screenShare.username}'s Screen` : "Fallback Screen Share"}
                 </button>
               </div>
           </div>

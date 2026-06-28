@@ -42,7 +42,7 @@ function createRoom(ownerName = "Host", requestedRoomId = "") {
     users: [],
     videoUrl: "",
     externalUrl: "",
-    mode: "direct-video",
+    mode: "web",
     youtubeId: "",
     webSync: {
       seq: 0,

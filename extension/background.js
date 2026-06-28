@@ -1,13 +1,18 @@
 const DEFAULTS = {
   enabled: false,
-  serverUrl: "http://localhost:5000",
+  serverUrl: "https://syncwatch-tgzg.onrender.com",
   roomId: "",
   role: "controller",
   deviceId: ""
 };
 
 async function getConfig() {
-  const stored = await chrome.storage.local.get(DEFAULTS);
+  const saved = await chrome.storage.local.get(null);
+  const stored = { ...DEFAULTS, ...saved };
+  if (!saved.serverUrl || saved.serverUrl === "http://localhost:5000") {
+    stored.serverUrl = DEFAULTS.serverUrl;
+    await chrome.storage.local.set({ serverUrl: stored.serverUrl });
+  }
   if (!stored.deviceId) {
     stored.deviceId = crypto.randomUUID();
     await chrome.storage.local.set({ deviceId: stored.deviceId });
