@@ -5,7 +5,8 @@
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "prepare:app": "node prepare.cjs",
+    "dist": "npm run prepare:app && electron-builder --win"
   },
   "devDependencies": {
     "electron": "latest",
@@ -18,7 +19,8 @@
       "main.cjs",
       "preload.cjs",
       "guest-preload.cjs",
-      "package.json"
+      "package.json",
+      "app/**/*"
     ],
     "win": {
       "target": "nsis"

@@ -5,6 +5,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "client/**"
       - "desktop/**"
       - ".github/workflows/desktop.yml"
 
@@ -16,7 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
         working-directory: desktop
       - run: npm run dist
         working-directory: desktop

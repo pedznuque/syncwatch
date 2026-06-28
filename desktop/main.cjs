@@ -3,6 +3,7 @@ const path = require("node:path");
 
 const APP_URL = process.env.SYNCWATCH_URL
   || (app.isPackaged ? "https://syncwatch-tgzg.onrender.com" : "http://localhost:5173");
+const PACKAGED_INDEX = path.join(__dirname, "app", "index.html");
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -30,6 +31,12 @@ function createWindow() {
     shell.openExternal(url);
     return { action: "deny" };
   });
+
+  if (app.isPackaged) {
+    window.loadFile(PACKAGED_INDEX);
+    return;
+  }
+
   window.loadURL(APP_URL);
 }
 
