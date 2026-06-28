@@ -98,6 +98,18 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/ice-config", (_req, res) => {
+  const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+  if (process.env.TURN_URLS && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    iceServers.push({
+      urls: process.env.TURN_URLS.split(",").map((url) => url.trim()).filter(Boolean),
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL
+    });
+  }
+  res.json({ iceServers });
+});
+
 app.post("/rooms", (req, res) => {
   const ownerName = req.body?.ownerName || "Host";
   const room = createRoom(ownerName);

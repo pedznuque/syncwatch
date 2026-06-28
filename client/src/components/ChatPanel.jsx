@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Mic, MicOff, PhoneOff, Send, Users } from "lucide-react";
 import { socket } from "../utils/socket.js";
-
-const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+import { DEFAULT_ICE_SERVERS, loadIceServers } from "../utils/iceServers.js";
 
 export default function ChatPanel({ roomId, username, initialMessages = [], users = [] }) {
   const [messages, setMessages] = useState(initialMessages);
@@ -16,6 +15,11 @@ export default function ChatPanel({ roomId, username, initialMessages = [], user
   const localStreamRef = useRef(null);
   const peersRef = useRef(new Map());
   const audioWrapRef = useRef(null);
+  const iceServersRef = useRef(DEFAULT_ICE_SERVERS);
+
+  useEffect(() => {
+    loadIceServers().then((servers) => { iceServersRef.current = servers; });
+  }, []);
 
   useEffect(() => setMessages(initialMessages.slice(-100)), [initialMessages]);
 
@@ -29,7 +33,7 @@ export default function ChatPanel({ roomId, username, initialMessages = [], user
 
   const createPeer = (targetSocketId, initiator = false) => {
     if (peersRef.current.has(targetSocketId)) return peersRef.current.get(targetSocketId);
-    const peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const peer = new RTCPeerConnection({ iceServers: iceServersRef.current, iceCandidatePoolSize: 2 });
     peersRef.current.set(targetSocketId, peer);
 
     localStreamRef.current?.getTracks().forEach((track) => peer.addTrack(track, localStreamRef.current));

@@ -13,3 +13,9 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: TURN_URLS
+        sync: false
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false

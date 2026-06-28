@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Gauge, Maximize2, MonitorUp, RotateCw, Square, X } from "lucide-react";
 import { socket } from "../utils/socket.js";
+import { DEFAULT_ICE_SERVERS, loadIceServers } from "../utils/iceServers.js";
 import FullscreenChatOverlay from "./FullscreenChatOverlay.jsx";
 
-const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 const QUALITY_MODES = {
   smooth: { label: "Smooth 720p60", width: 1280, height: 720, frameRate: 60, bitrate: 6_000_000, minBitrate: 2_500_000, degradationPreference: "maintain-framerate", contentHint: "motion", codec: "video/H264" },
   high: { label: "Full HD 1080p60", width: 1920, height: 1080, frameRate: 60, bitrate: 12_000_000, minBitrate: 4_500_000, degradationPreference: "maintain-framerate", contentHint: "motion", codec: "video/H264" },
@@ -25,6 +25,7 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username }
   const pendingIceRef = useRef(new Map());
   const senderAdaptationRef = useRef(new Map());
   const senderStatsRef = useRef(new Map());
+  const iceServersRef = useRef(DEFAULT_ICE_SERVERS);
   const qualityRef = useRef("high");
 
   const configureVideoSender = async (sender, requestedScale) => {
@@ -123,7 +124,7 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username }
     const existing = peersRef.current.get(targetSocketId);
     if (existing && existing.connectionState !== "closed") return existing;
 
-    const peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const peer = new RTCPeerConnection({ iceServers: iceServersRef.current, iceCandidatePoolSize: 4 });
     peersRef.current.set(targetSocketId, peer);
 
     if (sendStream && localStreamRef.current) {
@@ -219,6 +220,10 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username }
       if (error.name !== "NotAllowedError") setStatus("Screen sharing is unavailable in this browser.");
     }
   };
+
+  useEffect(() => {
+    loadIceServers().then((servers) => { iceServersRef.current = servers; });
+  }, []);
 
   useEffect(() => {
     const flushIce = async (socketId, peer) => {
