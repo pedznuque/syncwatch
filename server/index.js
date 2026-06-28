@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import cors from "cors";
 import { Server } from "socket.io";
 import { nanoid } from "nanoid";
+import { randomInt } from "node:crypto";
 import { streamExtractor } from "./streamExtractor.js";
 
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
@@ -14,7 +15,7 @@ const CLIENT_DIST = path.resolve(__dirname, "../client/dist");
 
 const allowedOrigins = [CLIENT_ORIGIN, process.env.RENDER_EXTERNAL_URL, "http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"].filter(Boolean);
 const allowOrigin = (origin, callback) => {
-  const allowed = !origin || allowedOrigins.includes(origin) || origin.startsWith("chrome-extension://");
+  const allowed = !origin || allowedOrigins.includes(origin);
   callback(allowed ? null : new Error("Origin not allowed"), allowed);
 };
 
@@ -34,7 +35,8 @@ const io = new Server(server, {
 const rooms = new Map();
 
 function createRoom(ownerName = "Host", requestedRoomId = "") {
-  const roomId = /^[A-Za-z0-9_-]{4,32}$/.test(requestedRoomId) ? requestedRoomId : nanoid(8);
+  let roomId = /^\d{6}$/.test(requestedRoomId) ? requestedRoomId : "";
+  while (!roomId || rooms.has(roomId)) roomId = String(randomInt(100000, 1000000));
   rooms.set(roomId, {
     roomId,
     hostSocketId: null,
@@ -122,6 +124,9 @@ app.get("/rooms/:roomId", (req, res) => {
   res.json(publicRoom(room));
 });
 
+const canControlRoom = (room, socketId) => room.hostSocketId === socketId
+  || room.users.some((user) => user.socketId === socketId && user.isController);
+
 app.get("/rooms/:roomId/web-sync", (req, res) => {
   const room = rooms.get(req.params.roomId);
   if (!room) return res.status(404).json({ error: "Room not found" });
@@ -176,10 +181,9 @@ app.post("/extract-stream", async (req, res) => {
 
 io.on("connection", (socket) => {
   socket.on("room:join", ({ roomId, username }) => {
-    let room = rooms.get(roomId);
-    // Recreate expired/in-memory rooms under the URL's room ID so every
-    // subsequent media, chat, voice, and screen event targets the same room.
-    if (!room) room = createRoom(username || "Host", roomId);
+    const normalizedRoomId = String(roomId || "");
+    const room = /^\d{6}$/.test(normalizedRoomId) ? rooms.get(normalizedRoomId) : null;
+    if (!room) return socket.emit("room:error", { message: "Room does not exist or has expired." });
 
     socket.join(roomId);
 
@@ -192,6 +196,7 @@ io.on("connection", (socket) => {
       const joinedUser = {
         socketId: socket.id,
         username: username || `Guest-${socket.id.slice(0, 4)}`,
+        isController: false,
         joinedAt: new Date().toISOString()
       };
       room.users.push(joinedUser);
@@ -207,7 +212,7 @@ io.on("connection", (socket) => {
 
   socket.on("room:set-media", ({ roomId, mode, videoUrl, externalUrl, youtubeId }) => {
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || !canControlRoom(room, socket.id)) return;
 
     room.mode = ["direct-video", "youtube", "web"].includes(mode) ? mode : "direct-video";
     room.videoUrl = videoUrl || "";
@@ -218,7 +223,7 @@ io.on("connection", (socket) => {
         ...room.webSync,
         seq: room.webSync.seq + 1,
         url: room.externalUrl,
-        title: "Waiting for extension to detect video",
+        title: "Supported web media ready",
         sourceId: "app",
         updatedAt: Date.now()
       };
@@ -237,7 +242,7 @@ io.on("connection", (socket) => {
 
   socket.on("player:play", ({ roomId, currentTime }) => {
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || !canControlRoom(room, socket.id)) return;
     room.isPlaying = true;
     room.currentTime = Number(currentTime || 0);
     socket.to(roomId).emit("player:play", room.currentTime);
@@ -245,7 +250,7 @@ io.on("connection", (socket) => {
 
   socket.on("player:pause", ({ roomId, currentTime }) => {
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || !canControlRoom(room, socket.id)) return;
     room.isPlaying = false;
     room.currentTime = Number(currentTime || 0);
     socket.to(roomId).emit("player:pause", room.currentTime);
@@ -253,7 +258,7 @@ io.on("connection", (socket) => {
 
   socket.on("player:seek", ({ roomId, currentTime }) => {
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || !canControlRoom(room, socket.id)) return;
     room.currentTime = Number(currentTime || 0);
     socket.to(roomId).emit("player:seek", room.currentTime);
   });
@@ -262,13 +267,24 @@ io.on("connection", (socket) => {
   // constant seeks or unnecessary network traffic.
   socket.on("player:sync", ({ roomId, currentTime, isPlaying }) => {
     const room = rooms.get(roomId);
-    if (!room || room.hostSocketId !== socket.id) return;
+    if (!room || !canControlRoom(room, socket.id)) return;
     room.currentTime = Number(currentTime || 0);
     room.isPlaying = Boolean(isPlaying);
     socket.to(roomId).emit("player:sync", {
       currentTime: room.currentTime,
       isPlaying: room.isPlaying
     });
+  });
+
+  socket.on("room:set-controller", ({ roomId, targetSocketId, enabled }) => {
+    const room = rooms.get(roomId);
+    if (!room || room.hostSocketId !== socket.id || targetSocketId === socket.id) return;
+    const target = room.users.find((user) => user.socketId === targetSocketId);
+    if (!target) return;
+    target.isController = Boolean(enabled);
+    io.to(roomId).emit("room:users", room.users);
+    const message = addSystemMessage(room, `${target.username} ${target.isController ? "can now control playback" : "is now a viewer"}`);
+    io.to(roomId).emit("chat:message", message);
   });
 
   socket.on("chat:message", ({ roomId, username, text, image }) => {
@@ -359,7 +375,7 @@ io.on("connection", (socket) => {
   // WebRTC signaling for screen sharing
   socket.on("screen:start", ({ roomId }) => {
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || !canControlRoom(room, socket.id)) return;
     const user = room.users.find((item) => item.socketId === socket.id);
     room.screenShare = {
       userId: socket.id,

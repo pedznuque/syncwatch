@@ -26,3 +26,15 @@ export function extractYouTubeId(value) {
   if (["embed", "shorts", "live"].includes(parts[0])) return parts[1] || "";
   return "";
 }
+
+export function isDirectVideoUrl(value) {
+  const url = parseUrl(value);
+  return Boolean(url && /\.(mp4|webm|ogg|ogv)(?:$|[?#])/i.test(url.href));
+}
+
+export function detectWebMedia(value) {
+  const youtubeId = extractYouTubeId(value);
+  if (youtubeId) return { mode: "youtube", youtubeId };
+  if (isDirectVideoUrl(value)) return { mode: "direct-video", videoUrl: value.trim() };
+  return null;
+}

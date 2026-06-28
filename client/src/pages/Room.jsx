@@ -4,7 +4,6 @@ import { socket } from "../utils/socket.js";
 import MediaPanel from "../components/MediaPanel.jsx";
 import ChatPanel from "../components/ChatPanel.jsx";
 import InvitePanel from "../components/InvitePanel.jsx";
-import ScreenSharePanel from "../components/ScreenSharePanel.jsx";
 
 function saveRoomHistory(roomId, username) {
   const key = "syncwatch_room_history";
@@ -23,7 +22,6 @@ export default function Room() {
   const [roomState, setRoomState] = useState(null);
   const [users, setUsers] = useState([]);
   const [connected, setConnected] = useState(socket.connected);
-  const [showScreenShare, setShowScreenShare] = useState(false);
   const [screenShare, setScreenShare] = useState(null);
 
   useEffect(() => saveRoomHistory(roomId, username), [roomId, username]);
@@ -35,26 +33,28 @@ export default function Room() {
     };
 
     const onDisconnect = () => setConnected(false);
+    const onRoomError = ({ message }) => {
+      alert(message || "Room does not exist.");
+      navigate("/");
+    };
     const onState = (state) => {
       setRoomState(state);
       setUsers(state.users || []);
       setScreenShare(state.screenShare || null);
-      if (state.screenShare) setShowScreenShare(true);
     };
     const onUsers = (nextUsers) => setUsers(nextUsers || []);
     const onHost = (hostSocketId) => setRoomState((current) => current ? { ...current, hostSocketId } : current);
     const onScreenStarted = (share) => {
       setScreenShare(share);
-      setShowScreenShare(true);
     };
     const onScreenStopped = () => {
       setScreenShare(null);
-      setShowScreenShare(false);
     };
 
     socket.on("connect", join);
     socket.on("disconnect", onDisconnect);
     socket.on("room:state", onState);
+    socket.on("room:error", onRoomError);
     socket.on("room:users", onUsers);
     socket.on("room:host", onHost);
     socket.on("screen:started", onScreenStarted);
@@ -67,12 +67,16 @@ export default function Room() {
       socket.off("connect", join);
       socket.off("disconnect", onDisconnect);
       socket.off("room:state", onState);
+      socket.off("room:error", onRoomError);
       socket.off("room:users", onUsers);
       socket.off("room:host", onHost);
       socket.off("screen:started", onScreenStarted);
       socket.off("screen:stopped", onScreenStopped);
     };
-  }, [roomId, username]);
+  }, [navigate, roomId, username]);
+
+  const isHost = roomState?.hostSocketId === socket.id;
+  const canControl = isHost || Boolean(users.find((user) => user.socketId === socket.id)?.isController);
 
   const leaveRoom = () => {
     socket.emit("room:leave", { roomId });
@@ -94,30 +98,15 @@ export default function Room() {
 
       <div className="watch-shell">
         <section className="watch-main">
-          <div hidden={showScreenShare}>
-              <MediaPanel
-                roomId={roomId}
-                state={roomState}
-                onScreenShare={() => setShowScreenShare(true)}
-                username={username}
-                isHost={roomState?.hostSocketId === socket.id}
-              />
-              <div className="below-player-grid streamlined-bottom">
-                <InvitePanel roomId={roomId} users={users} onLeave={leaveRoom} />
-                <button
-                  className="screen-share-entry primary"
-                  onClick={() => setShowScreenShare(true)}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M23 7l-7 5 7 5V7z"></path>
-                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-                  </svg>
-                  {screenShare ? `View ${screenShare.username}'s Screen` : "Fallback Screen Share"}
-                </button>
-              </div>
-          </div>
-          <div hidden={!showScreenShare}>
-            <ScreenSharePanel roomId={roomId} shareInfo={screenShare} onBack={() => setShowScreenShare(false)} username={username} />
+          <MediaPanel
+            roomId={roomId}
+            state={roomState}
+            screenShare={screenShare}
+            username={username}
+            isHost={canControl}
+          />
+          <div className="below-player-grid streamlined-bottom">
+            <InvitePanel roomId={roomId} users={users} onLeave={leaveRoom} isHost={isHost} hostSocketId={roomState?.hostSocketId} />
           </div>
         </section>
 

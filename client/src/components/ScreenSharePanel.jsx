@@ -10,7 +10,7 @@ const QUALITY_MODES = {
   ultra: { label: "Sharp 1080p30", width: 1920, height: 1080, frameRate: 30, bitrate: 12_000_000, minBitrate: 5_000_000, degradationPreference: "balanced", contentHint: "detail", codec: "video/VP9" }
 };
 
-export default function ScreenSharePanel({ roomId, shareInfo, onBack, username }) {
+export default function ScreenSharePanel({ roomId, shareInfo, onBack, username, embedded = false, canShare = false }) {
   const [isSharing, setIsSharing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [status, setStatus] = useState("Choose a browser tab or window to share.");
@@ -409,9 +409,9 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username }
   const isLocalShare = isSharing || shareInfo?.userId === socket.id;
 
   return (
-    <section className="panel screen-share-panel">
+    <section className={embedded ? "screen-share-panel embedded-screen-share" : "panel screen-share-panel"}>
       <div className="screen-toolbar">
-        <button onClick={onBack} title="Back to media"><ArrowLeft size={17} /> Back</button>
+        {!embedded && <button onClick={onBack} title="Back to media"><ArrowLeft size={17} /> Back</button>}
         <div className="screen-toolbar-title">
           <strong>{isLocalShare ? "Your screen" : shareInfo ? `${shareInfo.username}'s screen` : "Screen share"}</strong>
           <span>{status}</span>
@@ -427,22 +427,22 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username }
         )}
         {isLocalShare && <button onClick={startScreenShare}><RotateCw size={17} /> Restart</button>}
         {isLocalShare && <button className="danger" onClick={() => stopLocalShare(true)}><Square size={17} /> Stop</button>}
-        <button className="icon-button" onClick={onBack} title="Close screen share view"><X size={17} /></button>
+        {!embedded && <button className="icon-button" onClick={onBack} title="Close screen share view"><X size={17} /></button>}
       </div>
 
       {hasActiveShare ? (
         <div ref={containerRef} className={isFullscreen ? "screen-stage fullscreen" : "screen-stage"}>
-          <video ref={videoRef} autoPlay playsInline muted={isLocalShare} controls={!isLocalShare} />
+          <video ref={videoRef} autoPlay playsInline muted={isLocalShare} />
           <button className="screen-stage-fullscreen" onClick={toggleFullscreen} title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
             <Maximize2 size={18} />
           </button>
           {isFullscreen && <FullscreenChatOverlay roomId={roomId} username={username} />}
         </div>
-      ) : (
+      ) : canShare ? (
         <div className="screen-share-start">
           <MonitorUp size={48} />
-          <h3>Share a browser tab, window, or screen</h3>
-          <p>For streaming sites: open the official video, choose that browser tab, and enable “Share tab audio”.</p>
+          <h3>Share a website or video tab</h3>
+          <p>Open the website in another tab, click below, select that browser tab, and enable “Share tab audio”. No extension is needed.</p>
           <label className="screen-quality-control screen-quality-picker">
             <Gauge size={17} />
             <span>Quality</span>
@@ -451,7 +451,13 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username }
             </select>
           </label>
           <small className="screen-quality-note">{networkQuality} · Higher modes need a fast upload connection.</small>
-          <button className="primary" onClick={startScreenShare}><MonitorUp size={18} /> Choose screen to share</button>
+          <button className="primary" onClick={startScreenShare}><MonitorUp size={18} /> Choose browser tab</button>
+        </div>
+      ) : (
+        <div className="screen-share-start viewer-waiting">
+          <MonitorUp size={48} />
+          <h3>Waiting for the host</h3>
+          <p>The host controls the website or video. Their selected browser tab will appear here automatically.</p>
         </div>
       )}
     </section>

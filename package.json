@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "build": "npm ci --prefix client && npm run build --prefix client && npm ci --omit=dev --prefix server",
-    "start": "npm start --prefix server"
+    "start": "npm start --prefix server",
+    "desktop": "npm start --prefix desktop",
+    "desktop:dist": "npm run dist --prefix desktop"
   },
   "engines": {
     "node": ">=20"

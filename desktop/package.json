@@ -1,0 +1,27 @@
+{
+  "name": "syncwatch-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "latest",
+    "electron-builder": "latest"
+  },
+  "build": {
+    "appId": "com.syncwatch.desktop",
+    "productName": "SyncWatch",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "guest-preload.cjs",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

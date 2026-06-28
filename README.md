@@ -12,18 +12,31 @@ A React + Node.js watch-party starter app with:
 - Recent room history on the home page
 - Direct legal video URL sync
 - YouTube in-room playback sync
-- Universal Web mode with a companion Chrome/Edge extension for HTML5 video synchronization
-- Peer-to-peer browser-tab screen sharing for sites that cannot be embedded
+- Extension-free Web mode that detects supported YouTube and direct video links
+- Host-only playback controls with synchronized play, pause, seek, and late joining
+- Separate peer-to-peer Screen Share option with tab audio
+- Six-digit numeric room codes validated before joining
+- Host-granted moderator playback controls
+- Desktop embedded-browser mode for locally authenticated website video
 
 ## Important legal note
 
 This project does not download, proxy, bypass DRM, or restream protected platforms like Netflix, Viu, or Bilibili. Those services must be opened through their official websites/apps using each viewer's own account.
 
-For protected platforms, each user opens the official website with legitimate access. The companion extension synchronizes ordinary HTML5 playback state; Screen Share sends one browser-tab view to the room. Neither feature bypasses DRM.
+In **Web** mode, the host pastes a supported YouTube or direct `.mp4`/`.webm` link. SyncWatch loads the player independently for every participant and keeps it synchronized under host control. For unsupported or protected platforms, use the separate **Screen Share** option, choose the tab playing the video, and enable **Share tab audio**. No browser extension is required, and neither mode bypasses DRM.
 
-## Web mode extension
+The Windows desktop app extends Web mode to ordinary HTML5 video players on websites such as Bilibili or Viu. Every participant loads the original site locally and signs in with their own account. Provider DRM, terms, region restrictions, and players that hide video inside inaccessible frames can still prevent synchronization; Screen Share remains the fallback.
 
-Load the unpacked extension from `watch-party-app/extension` in `chrome://extensions`. Use **Controller** on the browser controlling the video and **Viewer** on the other browser. Both use the same room code. See `extension/README.md` for the short setup guide.
+## Desktop app
+
+Start the web client and server locally, then run:
+
+```bash
+npm install --prefix desktop
+npm run desktop
+```
+
+Set `SYNCWATCH_URL` to point the desktop shell at a different deployed server. Pushing desktop changes to `main` runs the Windows packaging workflow and uploads the installer as a GitHub Actions artifact.
 
 ## Run the backend
 

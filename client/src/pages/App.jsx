@@ -36,12 +36,19 @@ export default function App() {
     }
   };
 
-  const joinRoom = () => {
+  const joinRoom = async () => {
     setError("");
     saveName();
     const code = joinCode.trim();
-    if (!code) return setError("Enter a room code first.");
-    navigate(`/room/${code}`);
+    if (!/^\d{6}$/.test(code)) return setError("Enter the 6-digit room code.");
+    try {
+      const response = await fetch(`${SERVER_URL}/rooms/${code}`);
+      if (response.status === 404) return setError("That room does not exist or has expired.");
+      if (!response.ok) throw new Error("Could not validate the room.");
+      navigate(`/room/${code}`);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   return (
@@ -63,7 +70,7 @@ export default function App() {
         </div>
 
         <div className="join-row">
-          <input value={joinCode} placeholder="Enter room code" onChange={(e) => setJoinCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && joinRoom()} />
+          <input value={joinCode} inputMode="numeric" maxLength={6} placeholder="Enter 6-digit room code" onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && joinRoom()} />
           <button onClick={joinRoom}>Join</button>
         </div>
 
