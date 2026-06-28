@@ -19,6 +19,14 @@ export default function DesktopWebPlayer({ roomId, url, canControl, initialTime 
       setStatus("Website loaded. Sign in with your own account if required.");
       send({ type: "sync", currentTime: Number(initialTime || 0), isPlaying: Boolean(initialPlaying) });
     };
+    const onLoadStart = () => {
+      setVideoFound(false);
+      setStatus("Loading website...");
+    };
+    const onLoadFailed = (event) => {
+      if (event.errorCode === -3) return;
+      setStatus(`Website could not load: ${event.errorDescription || "connection failed"}`);
+    };
     const onIpc = (event) => {
       if (event.channel === "syncwatch:video-found") {
         setVideoFound(true);
@@ -40,6 +48,8 @@ export default function DesktopWebPlayer({ roomId, url, canControl, initialTime 
     const onSync = ({ currentTime, isPlaying }) => send({ type: "sync", currentTime: Number(currentTime || 0), isPlaying: Boolean(isPlaying) });
 
     webview.addEventListener("dom-ready", onReady);
+    webview.addEventListener("did-start-loading", onLoadStart);
+    webview.addEventListener("did-fail-load", onLoadFailed);
     webview.addEventListener("ipc-message", onIpc);
     socket.on("player:play", onPlay);
     socket.on("player:pause", onPause);
@@ -47,6 +57,8 @@ export default function DesktopWebPlayer({ roomId, url, canControl, initialTime 
     socket.on("player:sync", onSync);
     return () => {
       webview.removeEventListener("dom-ready", onReady);
+      webview.removeEventListener("did-start-loading", onLoadStart);
+      webview.removeEventListener("did-fail-load", onLoadFailed);
       webview.removeEventListener("ipc-message", onIpc);
       socket.off("player:play", onPlay);
       socket.off("player:pause", onPause);

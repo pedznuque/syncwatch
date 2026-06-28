@@ -5,16 +5,16 @@ import { DEFAULT_ICE_SERVERS, loadIceServers } from "../utils/iceServers.js";
 import FullscreenChatOverlay from "./FullscreenChatOverlay.jsx";
 
 const QUALITY_MODES = {
-  smooth: { label: "Smooth 720p60", width: 1280, height: 720, frameRate: 60, bitrate: 6_000_000, minBitrate: 2_500_000, degradationPreference: "maintain-framerate", contentHint: "motion", codec: "video/H264" },
-  high: { label: "Full HD 1080p60", width: 1920, height: 1080, frameRate: 60, bitrate: 12_000_000, minBitrate: 4_500_000, degradationPreference: "maintain-framerate", contentHint: "motion", codec: "video/H264" },
-  ultra: { label: "Sharp 1080p30", width: 1920, height: 1080, frameRate: 30, bitrate: 12_000_000, minBitrate: 5_000_000, degradationPreference: "balanced", contentHint: "detail", codec: "video/VP9" }
+  smooth: { label: "Balanced 720p30", width: 1280, height: 720, frameRate: 30, bitrate: 3_000_000, minBitrate: 1_000_000, degradationPreference: "balanced", contentHint: "motion", codec: "video/H264" },
+  high: { label: "Full HD 1080p30", width: 1920, height: 1080, frameRate: 30, bitrate: 6_000_000, minBitrate: 2_000_000, degradationPreference: "balanced", contentHint: "motion", codec: "video/H264" },
+  ultra: { label: "Sharp 1080p60", width: 1920, height: 1080, frameRate: 60, bitrate: 9_000_000, minBitrate: 3_500_000, degradationPreference: "maintain-framerate", contentHint: "detail", codec: "video/VP9" }
 };
 
 export default function ScreenSharePanel({ roomId, shareInfo, onBack, username, embedded = false, canShare = false }) {
   const [isSharing, setIsSharing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [status, setStatus] = useState("Choose a browser tab or window to share.");
-  const [quality, setQuality] = useState("high");
+  const [quality, setQuality] = useState("smooth");
   const [networkQuality, setNetworkQuality] = useState("Ready");
   const [streamMetrics, setStreamMetrics] = useState("");
   const videoRef = useRef(null);
@@ -26,11 +26,11 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username, 
   const senderAdaptationRef = useRef(new Map());
   const senderStatsRef = useRef(new Map());
   const iceServersRef = useRef(DEFAULT_ICE_SERVERS);
-  const qualityRef = useRef("high");
+  const qualityRef = useRef("smooth");
 
   const configureVideoSender = async (sender, requestedScale) => {
     if (!sender?.track || sender.track.kind !== "video") return;
-    const config = QUALITY_MODES[qualityRef.current] || QUALITY_MODES.high;
+    const config = QUALITY_MODES[qualityRef.current] || QUALITY_MODES.smooth;
     try {
       const viewerCount = Math.max(1, peersRef.current.size);
       const targetBitrate = Math.min(config.bitrate, Math.max(config.minBitrate, Math.round(config.bitrate / viewerCount)));
@@ -64,7 +64,7 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username, 
     const transceiver = peer.getTransceivers().find((item) => item.sender === sender);
     const codecs = globalThis.RTCRtpSender?.getCapabilities?.("video")?.codecs;
     if (!transceiver?.setCodecPreferences || !codecs?.length) return;
-    const preferredCodec = (QUALITY_MODES[qualityRef.current] || QUALITY_MODES.high).codec.toLowerCase();
+    const preferredCodec = (QUALITY_MODES[qualityRef.current] || QUALITY_MODES.smooth).codec.toLowerCase();
     // Keep all advertised codecs as fallbacks, but prefer VP9 for the Sharp
     // preset and H.264 for the motion-focused presets.
     const preferred = [...codecs].sort((a, b) => {
@@ -75,7 +75,7 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username, 
   };
 
   const applyCaptureQuality = async (stream) => {
-    const config = QUALITY_MODES[qualityRef.current] || QUALITY_MODES.high;
+    const config = QUALITY_MODES[qualityRef.current] || QUALITY_MODES.smooth;
     const track = stream?.getVideoTracks?.()[0];
     if (!track) return;
     track.contentHint = config.contentHint;
@@ -186,6 +186,7 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username, 
 
   const startScreenShare = async () => {
     try {
+      iceServersRef.current = await loadIceServers();
       const nextStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           cursor: "always",
@@ -244,6 +245,7 @@ export default function ScreenSharePanel({ roomId, shareInfo, onBack, username, 
     };
 
     const onOffer = async ({ fromSocketId, offer }) => {
+      iceServersRef.current = await loadIceServers();
       const peer = createPeer(fromSocketId, false);
       await peer.setRemoteDescription(new RTCSessionDescription(offer));
       await flushIce(fromSocketId, peer);

@@ -32,13 +32,28 @@ function bindVideo(video) {
   });
 }
 
+function scanRoot(root) {
+  root.querySelectorAll?.("video").forEach(bindVideo);
+  root.querySelectorAll?.("*").forEach((element) => {
+    if (element.shadowRoot) scanRoot(element.shadowRoot);
+  });
+  root.querySelectorAll?.("iframe").forEach((frame) => {
+    try {
+      if (frame.contentDocument) scanRoot(frame.contentDocument);
+    } catch {}
+  });
+}
+
+let scanTimer = null;
 function scan() {
-  document.querySelectorAll("video").forEach(bindVideo);
+  clearTimeout(scanTimer);
+  scanTimer = setTimeout(() => scanRoot(document), 50);
 }
 
 window.addEventListener("DOMContentLoaded", () => {
   scan();
   new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener("load", scan, true);
 });
 
 ipcRenderer.on("syncwatch:command", async (_event, command) => {

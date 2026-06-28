@@ -99,10 +99,12 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
         width: "100%",
         height: "100%",
         playerVars: {
+          enablejsapi: 1,
           playsinline: 1,
           rel: 0,
           modestbranding: 1,
           fs: 1,
+          origin: window.location.origin,
           quality: quality === "auto" ? "default" : "hd720"
         },
         events: {

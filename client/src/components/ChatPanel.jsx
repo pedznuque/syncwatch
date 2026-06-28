@@ -14,6 +14,7 @@ export default function ChatPanel({ roomId, username, initialMessages = [], user
   const bottomRef = useRef(null);
   const localStreamRef = useRef(null);
   const peersRef = useRef(new Map());
+  const pendingIceRef = useRef(new Map());
   const audioWrapRef = useRef(null);
   const iceServersRef = useRef(DEFAULT_ICE_SERVERS);
 
@@ -67,6 +68,7 @@ export default function ChatPanel({ roomId, username, initialMessages = [], user
 
   const joinVoice = async () => {
     try {
+      iceServersRef.current = await loadIceServers();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
       setVoiceOn(true);
@@ -83,6 +85,7 @@ export default function ChatPanel({ roomId, username, initialMessages = [], user
     localStreamRef.current = null;
     peersRef.current.forEach((peer) => peer.close());
     peersRef.current.clear();
+    pendingIceRef.current.clear();
     if (audioWrapRef.current) audioWrapRef.current.innerHTML = "";
     setVoiceOn(false);
     setMuted(false);
@@ -97,10 +100,19 @@ export default function ChatPanel({ roomId, username, initialMessages = [], user
   };
 
   useEffect(() => {
+    const flushIce = async (socketId, peer) => {
+      const queued = pendingIceRef.current.get(socketId) || [];
+      pendingIceRef.current.delete(socketId);
+      for (const candidate of queued) {
+        try { await peer.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+      }
+    };
+
     const onOffer = async ({ fromSocketId, offer }) => {
       if (!localStreamRef.current) return;
       const peer = createPeer(fromSocketId, false);
       await peer.setRemoteDescription(new RTCSessionDescription(offer));
+      await flushIce(fromSocketId, peer);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
       socket.emit("voice:answer", { targetSocketId: fromSocketId, answer });
@@ -108,18 +120,27 @@ export default function ChatPanel({ roomId, username, initialMessages = [], user
 
     const onAnswer = async ({ fromSocketId, answer }) => {
       const peer = peersRef.current.get(fromSocketId);
-      if (peer) await peer.setRemoteDescription(new RTCSessionDescription(answer));
+      if (!peer) return;
+      await peer.setRemoteDescription(new RTCSessionDescription(answer));
+      await flushIce(fromSocketId, peer);
     };
 
     const onIce = async ({ fromSocketId, candidate }) => {
       const peer = peersRef.current.get(fromSocketId);
-      if (!peer || !candidate) return;
-      try { await peer.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+      if (!candidate) return;
+      if (peer?.remoteDescription) {
+        try { await peer.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+        return;
+      }
+      const queued = pendingIceRef.current.get(fromSocketId) || [];
+      queued.push(candidate);
+      pendingIceRef.current.set(fromSocketId, queued);
     };
 
     const onUserLeft = ({ socketId }) => {
       peersRef.current.get(socketId)?.close();
       peersRef.current.delete(socketId);
+      pendingIceRef.current.delete(socketId);
       document.getElementById(`audio-${socketId}`)?.remove();
     };
 

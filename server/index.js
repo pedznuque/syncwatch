@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import cors from "cors";
 import { Server } from "socket.io";
 import { nanoid } from "nanoid";
-import { randomInt } from "node:crypto";
+import { createHmac, randomInt } from "node:crypto";
 import { streamExtractor } from "./streamExtractor.js";
 
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
@@ -23,7 +23,8 @@ const allowedOrigins = new Set(
 const allowOrigin = (origin, callback) => {
   let normalizedOrigin = origin;
   try { normalizedOrigin = origin ? new URL(origin).origin : origin; } catch {}
-  const allowed = !origin || allowedOrigins.has(normalizedOrigin);
+  const isLoopback = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(normalizedOrigin || "");
+  const allowed = !origin || allowedOrigins.has(normalizedOrigin) || isLoopback;
   callback(allowed ? null : new Error("Origin not allowed"), allowed);
 };
 
@@ -109,14 +110,36 @@ app.get("/health", (_req, res) => {
 });
 
 app.get("/ice-config", (_req, res) => {
-  const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+  const iceServers = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" }
+  ];
   if (process.env.TURN_URLS && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
     iceServers.push({
       urls: process.env.TURN_URLS.split(",").map((url) => url.trim()).filter(Boolean),
       username: process.env.TURN_USERNAME,
       credential: process.env.TURN_CREDENTIAL
     });
+  } else {
+    // Open Relay publishes this static-auth endpoint and secret for public use.
+    // Coturn REST credentials are short lived, limiting accidental reuse while
+    // still giving users behind carrier NAT or strict firewalls a relay path.
+    const username = String(Math.floor(Date.now() / 1000) + 60 * 60);
+    const credential = createHmac("sha1", "openrelayprojectsecret")
+      .update(username)
+      .digest("base64");
+    iceServers.push({
+      urls: [
+        "turn:staticauth.openrelay.metered.ca:80",
+        "turn:staticauth.openrelay.metered.ca:80?transport=tcp",
+        "turn:staticauth.openrelay.metered.ca:443",
+        "turns:staticauth.openrelay.metered.ca:443?transport=tcp"
+      ],
+      username,
+      credential
+    });
   }
+  res.set("Cache-Control", "no-store");
   res.json({ iceServers });
 });
 

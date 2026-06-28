@@ -12,6 +12,14 @@ const waitFor = (socket, event, predicate = () => true) => new Promise((resolve,
   socket.on(event, listener);
 });
 
+const iceResponse = await fetch(`${baseUrl}/ice-config`);
+if (!iceResponse.ok) throw new Error("ICE configuration failed");
+const iceConfig = await iceResponse.json();
+if (!iceConfig.iceServers?.some((server) => {
+  const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+  return urls.some((url) => String(url).startsWith("turn:") || String(url).startsWith("turns:"));
+})) throw new Error("TURN relay is missing from ICE configuration");
+
 const createdResponse = await fetch(`${baseUrl}/rooms`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },

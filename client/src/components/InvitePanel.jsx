@@ -4,7 +4,8 @@ import { socket } from "../utils/socket.js";
 
 export default function InvitePanel({ roomId, users, onLeave, isHost, hostSocketId }) {
   const [copied, setCopied] = useState(false);
-  const inviteUrl = `${window.location.origin}/room/${roomId}`;
+  const inviteOrigin = import.meta.env.VITE_SERVER_URL || window.location.origin;
+  const inviteUrl = `${inviteOrigin.replace(/\/$/, "")}/room/${roomId}`;
 
   const copyInvite = async () => {
     await navigator.clipboard.writeText(inviteUrl);
