@@ -42,7 +42,7 @@ function copyDir(source, target) {
 if (!fs.existsSync(clientModulesDir) || !fs.existsSync(viteBin)) {
   run("npm", ["ci", "--prefix", "client"], rootDir);
 }
-run("npm", ["run", "build", "--prefix", "client"], rootDir, {
+run("npm", ["run", "build", "--prefix", "client", "--", "--base=./"], rootDir, {
   ...process.env,
   VITE_SERVER_URL: serverUrl
 });
