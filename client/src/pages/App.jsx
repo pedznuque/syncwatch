@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:5000";
+const SERVER_URL = import.meta.env.VITE_SERVER_URL
+  || (import.meta.env.PROD ? window.location.origin : "http://localhost:5000");
 
 export default function App() {
   const navigate = useNavigate();
