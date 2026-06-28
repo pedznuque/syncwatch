@@ -13,9 +13,17 @@ const PORT = process.env.PORT || 5000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIST = path.resolve(__dirname, "../client/dist");
 
-const allowedOrigins = [CLIENT_ORIGIN, process.env.RENDER_EXTERNAL_URL, "http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"].filter(Boolean);
+const allowedOrigins = new Set(
+  [CLIENT_ORIGIN, process.env.RENDER_EXTERNAL_URL, "https://syncwatch-tgzg.onrender.com", "http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"]
+    .filter(Boolean)
+    .map((value) => {
+      try { return new URL(value).origin; } catch { return value.replace(/\/$/, ""); }
+    })
+);
 const allowOrigin = (origin, callback) => {
-  const allowed = !origin || allowedOrigins.includes(origin);
+  let normalizedOrigin = origin;
+  try { normalizedOrigin = origin ? new URL(origin).origin : origin; } catch {}
+  const allowed = !origin || allowedOrigins.has(normalizedOrigin);
   callback(allowed ? null : new Error("Origin not allowed"), allowed);
 };
 

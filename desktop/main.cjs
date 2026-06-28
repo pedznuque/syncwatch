@@ -2,7 +2,7 @@ const { app, BrowserWindow, shell } = require("electron");
 const path = require("node:path");
 
 const APP_URL = process.env.SYNCWATCH_URL
-  || (app.isPackaged ? "https://syncwatch.onrender.com" : "http://localhost:5173");
+  || (app.isPackaged ? "https://syncwatch-tgzg.onrender.com" : "http://localhost:5173");
 
 function createWindow() {
   const window = new BrowserWindow({

@@ -1,12 +1,15 @@
 import { io } from "socket.io-client";
 
 const baseUrl = process.env.SYNCWATCH_TEST_URL || "http://127.0.0.1:5000";
-const waitFor = (socket, event) => new Promise((resolve, reject) => {
+const waitFor = (socket, event, predicate = () => true) => new Promise((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${event}`)), 5000);
-  socket.once(event, (payload) => {
+  const listener = (payload) => {
+    if (!predicate(payload)) return;
     clearTimeout(timer);
+    socket.off(event, listener);
     resolve(payload);
-  });
+  };
+  socket.on(event, listener);
 });
 
 const createdResponse = await fetch(`${baseUrl}/rooms`, {
@@ -36,7 +39,9 @@ const guestUser = users.find((user) => user.username === "Guest");
 if (!guestUser) throw new Error("Guest did not join");
 
 host.emit("room:set-controller", { roomId: created.roomId, targetSocketId: guestUser.socketId, enabled: true });
-const promotedUsers = await waitFor(guest, "room:users");
+const promotedUsers = await waitFor(guest, "room:users", (nextUsers) =>
+  nextUsers.find((user) => user.socketId === guestUser.socketId)?.isController
+);
 if (!promotedUsers.find((user) => user.socketId === guestUser.socketId)?.isController) throw new Error("Moderator promotion failed");
 
 const mediaReceived = waitFor(host, "room:media");
