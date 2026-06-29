@@ -1,4 +1,4 @@
-const { app, BrowserWindow, desktopCapturer, session, shell } = require("electron");
+const { app, BrowserWindow, session, shell } = require("electron");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
@@ -88,12 +88,6 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionCheckHandler((webContents, permission) => (
     isTrustedAppUrl(webContents?.getURL()) && allowedPermissions.has(permission)
   ));
-  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
-    desktopCapturer.getSources({ types: ["screen", "window"] })
-      .then((sources) => callback(sources[0] ? { video: sources[0], audio: "loopback" } : {}))
-      .catch(() => callback({}));
-  }, { useSystemPicker: true });
-
   const window = createWindow();
   if (app.isPackaged) {
     const port = await startLocalAppServer();

@@ -1,94 +1,68 @@
-# SyncWatch React MVP
+# SyncWatch
 
-A React + Node.js watch-party starter app with:
+SyncWatch is a React and Node.js watch-party app. Every participant loads video from its original source while the room synchronizes play, pause, seek, playback speed, and late joining.
 
-- Improved cinema-style room interface
-- Right-side chat panel that scrolls independently from the page
-- Text chat
-- Picture sharing in chat
-- Voice chat with mic icon inside the chat panel
-- Invite link and room code copying
-- Leave-room button
-- Recent room history on the home page
-- Direct legal video URL sync
-- YouTube in-room playback sync
-- Extension-free Web mode that detects supported YouTube and direct video links
-- Host-only playback controls with synchronized play, pause, seek, and late joining
-- Separate peer-to-peer Screen Share option with tab audio
-- Six-digit numeric room codes validated before joining
-- Host-granted moderator playback controls
-- Desktop embedded-browser mode for locally authenticated website video
+## Features
 
-## Important legal note
+- Synchronized website streaming through the Manifest V3 browser extension
+- Embedded website player in the Windows desktop app
+- Built-in synchronized YouTube and direct `.mp4` / `.webm` players
+- Host controls with optional moderator access
+- Cross-network WebRTC voice chat with STUN, TURN fallback, presence-aware signaling, and reconnects
+- Text and picture chat, room invitations, six-digit room codes, and recent room history
 
-This project does not download, proxy, bypass DRM, or restream protected platforms like Netflix, Viu, or Bilibili. Those services must be opened through their official websites/apps using each viewer's own account.
+Screen sharing and restreaming are intentionally not included. SyncWatch only synchronizes player controls; it does not download, proxy, rebroadcast, decrypt, or bypass DRM. Each viewer must have legal access to the original website and sign in with their own account. Provider terms, region restrictions, DRM, autoplay policies, and inaccessible player frames still apply.
 
-In **Web** mode, the host pastes a supported YouTube or direct `.mp4`/`.webm` link. SyncWatch loads the player independently for every participant and keeps it synchronized under host control. For unsupported or protected platforms, use the separate **Screen Share** option, choose the tab playing the video, and enable **Share tab audio**. No browser extension is required, and neither mode bypasses DRM.
+## Browser extension
 
-The Windows desktop app extends Web mode to ordinary HTML5 video players on websites such as Bilibili or Viu. Every participant loads the original site locally and signs in with their own account. Provider DRM, terms, region restrictions, and players that hide video inside inaccessible frames can still prevent synchronization; Screen Share remains the fallback.
+The extension controls the primary HTML5 `<video>` element on a streaming page.
+
+1. Open `chrome://extensions` or `edge://extensions`.
+2. Enable **Developer mode**.
+3. Choose **Load unpacked** and select the [`extension`](extension) folder.
+4. Enter the SyncWatch server URL and room code.
+5. Select **Host / controller** for the person controlling playback and **Viewer** for everyone else.
+6. Enable the extension, then open or refresh the same streaming page in each browser.
+
+The GitHub Actions extension workflow also publishes a ready-to-unzip package as a build artifact.
+
+## Reliable voice across different networks
+
+The backend returns STUN and TURN configuration from `/ice-config`. For production, set these environment variables to your own TURN service:
+
+```txt
+TURN_URLS=turn:relay.example.com:3478,turns:relay.example.com:5349
+TURN_USERNAME=syncwatch
+TURN_CREDENTIAL=replace-me
+```
+
+Without these variables, the app uses the Open Relay static-auth service as a development fallback. Voice media remains encrypted by WebRTC, including while relayed through TURN.
+
+## Run locally
+
+Requires Node.js 20 or newer.
+
+```bash
+npm install --prefix server
+npm install --prefix client
+npm run dev --prefix server
+npm run dev --prefix client
+```
+
+Open `http://localhost:5173`. To test from another device, use the computer's LAN address and configure `VITE_SERVER_URL` when the client and server use different origins.
 
 ## Desktop app
-
-Start the web client and server locally, then run:
 
 ```bash
 npm install --prefix desktop
 npm run desktop
 ```
 
-Set `SYNCWATCH_URL` to point the desktop shell at a different deployed server. Pushing desktop changes to `main` runs the Windows packaging workflow and uploads the installer as a GitHub Actions artifact.
-
-## Run the backend
-
-```bash
-cd watch-party-app/server
-npm install
-npm run dev
-```
-
-If `nodemon is not recognized`, run:
-
-```bash
-npm install nodemon --save-dev
-npm run dev
-```
-
-Or use the non-auto-reload command:
-
-```bash
-npm start
-```
-
-## Run the frontend
-
-Open a second terminal:
-
-```bash
-cd watch-party-app/client
-npm install
-npm run dev
-```
-
-Open:
-
-```txt
-http://localhost:5173
-```
-
-## How to test with friends locally
-
-1. Start the server.
-2. Start the client.
-3. Create a room.
-4. Copy the invite link.
-5. Open the same invite link in another browser tab or another device on the same network.
-
-For phone testing on the same Wi-Fi, replace `localhost` with your computer's local IP address and configure `VITE_SERVER_URL` if needed.
+Set `SYNCWATCH_URL` to use another deployed app URL. Pushes affecting the desktop app build a Windows installer through GitHub Actions.
 
 ## Production notes
 
-- Add authentication before public deployment.
-- Store rooms/messages in a real database like MongoDB or PostgreSQL.
-- Use Redis for room state if scaling to multiple servers.
-- Use a TURN server for reliable WebRTC voice chat.
-- Keep protected streaming services in official-link mode unless you have written licensing and platform API permission.
+- Add authentication before a public launch.
+- Use persistent storage for rooms and messages.
+- Use Redis or another shared adapter when running multiple Socket.IO servers.
+- Configure a managed TURN service for dependable voice capacity and monitor its bandwidth.

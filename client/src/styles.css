@@ -431,7 +431,7 @@ button.danger, .danger { background: rgba(239, 68, 68, 0.22); color: #fecaca; }
 }
 .segmented button { border-radius: 12px; background: transparent; }
 .segmented button.active { background: linear-gradient(135deg, #4f46e5, #7c3aed); }
-.web-mode-tabs { display: grid; grid-template-columns: repeat(4, minmax(100px, 1fr)); width: 100%; }
+.web-mode-tabs { display: grid; grid-template-columns: repeat(3, minmax(100px, 1fr)); width: 100%; }
 .elevated-input { margin-bottom: 16px; }
 .elevated-input input { min-height: 46px; }
 .video,
@@ -469,6 +469,7 @@ button.danger, .danger { background: rgba(239, 68, 68, 0.22); color: #fecaca; }
   backdrop-filter: blur(8px);
 }
 .supported-web-card button { width: auto; }
+.web-sync-live { color: #a5b4fc; font-weight: 700; }
 .desktop-web-player {
   position: relative;
   width: 100%;
@@ -673,7 +674,6 @@ button.danger, .danger { background: rgba(239, 68, 68, 0.22); color: #fecaca; }
 .remote-audio { display: none; }
 .compact-panel .invite-box { display: grid; grid-template-columns: 1fr auto auto; }
 .streamlined-bottom { grid-template-columns: minmax(0, 1fr) minmax(220px, 320px); }
-.streamlined-bottom .screen-share-entry { height: 100%; }
 
 @media (max-width: 1100px) {
   .watch-shell { height: auto; grid-template-columns: 1fr; }
@@ -681,101 +681,6 @@ button.danger, .danger { background: rgba(239, 68, 68, 0.22); color: #fecaca; }
   .chat-dock { position: static; height: 620px; }
   .below-player-grid { grid-template-columns: 1fr; }
   .video, .youtube-player, .empty-player, .external-card { max-height: none; }
-}
-
-/* Screen Share Panel Styles */
-.screen-share-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.embedded-screen-share {
-  margin-top: 16px;
-  padding: 0;
-  background: transparent;
-}
-
-.viewer-waiting { background: rgba(2, 6, 23, .55); }
-
-.screen-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.screen-toolbar button {
-  width: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.screen-toolbar-title {
-  min-width: 180px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.screen-toolbar-title span { color: #94a3b8; font-size: 12px; }
-.screen-toolbar-title .stream-metrics { color: #a5b4fc; font-variant-numeric: tabular-nums; }
-
-.screen-quality-control {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 9px;
-  border: 1px solid rgba(148, 163, 184, .2);
-  border-radius: 11px;
-  color: #cbd5e1;
-  background: rgba(2, 6, 23, .62);
-  font-size: 13px;
-}
-.screen-quality-control select {
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  color: #f8fafc;
-  background: #0f172a;
-  font: inherit;
-}
-.screen-quality-picker { margin-top: 4px; }
-.screen-quality-note { color: #94a3b8; }
-.screen-share-entry {
-  width: 100%;
-  min-height: 48px;
-  font-weight: 700;
-  font-size: 15px;
-}
-
-.screen-stage {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border-radius: 14px;
-  background: #000;
-}
-
-.screen-stage.fullscreen { width: 100vw; height: 100vh; border-radius: 0; }
-.screen-stage video { width: 100%; height: 100%; object-fit: contain; background: #000; }
-.screen-stage-fullscreen {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 60;
-  width: 42px !important;
-  height: 42px;
-  padding: 0 !important;
-  border: 1px solid rgba(255, 255, 255, .16);
-  border-radius: 50%;
-  background: rgba(2, 6, 23, .54);
-  backdrop-filter: blur(10px);
 }
 
 .fullscreen-chat-overlay {
@@ -974,24 +879,6 @@ button.danger, .danger { background: rgba(239, 68, 68, 0.22); color: #fecaca; }
   to { transform: translateX(calc(-100vw - 100%)); }
 }
 
-.screen-share-start {
-  min-height: 420px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 32px;
-  border: 1px dashed rgba(148, 163, 184, .28);
-  border-radius: 14px;
-  text-align: center;
-  color: #cbd5e1;
-}
-
-.screen-share-start h3, .screen-share-start p { margin: 0; }
-.screen-share-start p { max-width: 680px; }
-.screen-share-start button { width: auto; display: inline-flex; align-items: center; gap: 8px; }
-
 .primary-btn {
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
   color: white;
@@ -1022,13 +909,6 @@ button.danger, .danger { background: rgba(239, 68, 68, 0.22); color: #fecaca; }
 .danger-btn:hover {
   background: rgba(239, 68, 68, 0.35);
   transform: translateY(-1px);
-}
-
-.screen-video-container {
-  width: 100%;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #000;
 }
 
 .player-overlay-button {
@@ -1064,16 +944,6 @@ button.danger, .danger { background: rgba(239, 68, 68, 0.22); color: #fecaca; }
   .media-input, .join-row, .invite-box, .compact-panel .invite-box, .external-sync-controls { grid-template-columns: 1fr; flex-direction: column; }
   .web-mode-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
   .web-mode-tabs button { min-width: 0; padding-inline: 6px; }
-  .screen-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 7px; }
-  .screen-toolbar-title { min-width: 0; }
-  .screen-toolbar-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .screen-toolbar .screen-quality-control { grid-column: 1 / -1; width: 100%; }
-  .screen-toolbar > button:not(.icon-button) { min-width: 0; padding-inline: 9px; }
-  .screen-toolbar .icon-button { width: 40px; }
-  .screen-share-start { min-height: 330px; padding: 22px 14px; }
-  .screen-share-start button { width: 100%; }
-  .screen-quality-picker { width: 100%; justify-content: center; }
-  .screen-share-entry { min-height: 44px; font-size: 14px; }
   .chat-dock { height: 70vh; }
   .message { max-width: 92%; }
   .chat-composer { padding: 8px; gap: 6px; }

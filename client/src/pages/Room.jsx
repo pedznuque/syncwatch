@@ -22,7 +22,6 @@ export default function Room() {
   const [roomState, setRoomState] = useState(null);
   const [users, setUsers] = useState([]);
   const [connected, setConnected] = useState(socket.connected);
-  const [screenShare, setScreenShare] = useState(null);
 
   useEffect(() => saveRoomHistory(roomId, username), [roomId, username]);
 
@@ -40,16 +39,9 @@ export default function Room() {
     const onState = (state) => {
       setRoomState(state);
       setUsers(state.users || []);
-      setScreenShare(state.screenShare || null);
     };
     const onUsers = (nextUsers) => setUsers(nextUsers || []);
     const onHost = (hostSocketId) => setRoomState((current) => current ? { ...current, hostSocketId } : current);
-    const onScreenStarted = (share) => {
-      setScreenShare(share);
-    };
-    const onScreenStopped = () => {
-      setScreenShare(null);
-    };
 
     socket.on("connect", join);
     socket.on("disconnect", onDisconnect);
@@ -57,8 +49,6 @@ export default function Room() {
     socket.on("room:error", onRoomError);
     socket.on("room:users", onUsers);
     socket.on("room:host", onHost);
-    socket.on("screen:started", onScreenStarted);
-    socket.on("screen:stopped", onScreenStopped);
 
     if (socket.connected) join();
 
@@ -70,8 +60,6 @@ export default function Room() {
       socket.off("room:error", onRoomError);
       socket.off("room:users", onUsers);
       socket.off("room:host", onHost);
-      socket.off("screen:started", onScreenStarted);
-      socket.off("screen:stopped", onScreenStopped);
     };
   }, [navigate, roomId, username]);
 
@@ -101,7 +89,6 @@ export default function Room() {
           <MediaPanel
             roomId={roomId}
             state={roomState}
-            screenShare={screenShare}
             username={username}
             isHost={canControl}
           />

@@ -1,26 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Mic, MicOff, PhoneOff, Send, Users } from "lucide-react";
 import { socket } from "../utils/socket.js";
-import { DEFAULT_ICE_SERVERS, loadIceServers } from "../utils/iceServers.js";
+import { useVoiceChat } from "../hooks/useVoiceChat.js";
 
 export default function ChatPanel({ roomId, username, initialMessages = [], users = [] }) {
   const [messages, setMessages] = useState(initialMessages);
   const [text, setText] = useState("");
   const [image, setImage] = useState(null);
-  const [voiceOn, setVoiceOn] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState("Voice off");
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
-  const localStreamRef = useRef(null);
-  const peersRef = useRef(new Map());
-  const pendingIceRef = useRef(new Map());
-  const audioWrapRef = useRef(null);
-  const iceServersRef = useRef(DEFAULT_ICE_SERVERS);
-
-  useEffect(() => {
-    loadIceServers().then((servers) => { iceServersRef.current = servers; });
-  }, []);
+  const { voiceOn, muted, voiceStatus, joinVoice, leaveVoice, toggleMute, audioWrapRef } = useVoiceChat(roomId);
 
   useEffect(() => setMessages(initialMessages.slice(-100)), [initialMessages]);
 
@@ -31,136 +20,6 @@ export default function ChatPanel({ roomId, username, initialMessages = [], user
   }, []);
 
   useEffect(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [messages]);
-
-  const createPeer = (targetSocketId, initiator = false) => {
-    if (peersRef.current.has(targetSocketId)) return peersRef.current.get(targetSocketId);
-    const peer = new RTCPeerConnection({ iceServers: iceServersRef.current, iceCandidatePoolSize: 2 });
-    peersRef.current.set(targetSocketId, peer);
-
-    localStreamRef.current?.getTracks().forEach((track) => peer.addTrack(track, localStreamRef.current));
-
-    peer.onicecandidate = (event) => {
-      if (event.candidate) socket.emit("voice:ice-candidate", { roomId, targetSocketId, candidate: event.candidate });
-    };
-
-    peer.ontrack = (event) => {
-      const stream = event.streams[0];
-      let audio = document.getElementById(`audio-${targetSocketId}`);
-      if (!audio) {
-        audio = document.createElement("audio");
-        audio.id = `audio-${targetSocketId}`;
-        audio.autoplay = true;
-        audio.playsInline = true;
-        audioWrapRef.current?.appendChild(audio);
-      }
-      audio.srcObject = stream;
-    };
-
-    if (initiator) {
-      peer.createOffer()
-        .then((offer) => peer.setLocalDescription(offer).then(() => offer))
-        .then((offer) => socket.emit("voice:offer", { roomId, targetSocketId, offer }))
-        .catch(() => setVoiceStatus("Could not start voice."));
-    }
-
-    return peer;
-  };
-
-  const joinVoice = async () => {
-    try {
-      iceServersRef.current = await loadIceServers();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      localStreamRef.current = stream;
-      setVoiceOn(true);
-      setMuted(false);
-      setVoiceStatus("Voice on");
-      users.filter((user) => user.socketId !== socket.id).forEach((user) => createPeer(user.socketId, true));
-    } catch {
-      setVoiceStatus("Mic permission denied");
-    }
-  };
-
-  const leaveVoice = () => {
-    localStreamRef.current?.getTracks().forEach((track) => track.stop());
-    localStreamRef.current = null;
-    peersRef.current.forEach((peer) => peer.close());
-    peersRef.current.clear();
-    pendingIceRef.current.clear();
-    if (audioWrapRef.current) audioWrapRef.current.innerHTML = "";
-    setVoiceOn(false);
-    setMuted(false);
-    setVoiceStatus("Voice off");
-  };
-
-  const toggleMute = () => {
-    const nextMuted = !muted;
-    localStreamRef.current?.getAudioTracks().forEach((track) => { track.enabled = !nextMuted; });
-    setMuted(nextMuted);
-    setVoiceStatus(nextMuted ? "Muted" : "Voice on");
-  };
-
-  useEffect(() => {
-    const flushIce = async (socketId, peer) => {
-      const queued = pendingIceRef.current.get(socketId) || [];
-      pendingIceRef.current.delete(socketId);
-      for (const candidate of queued) {
-        try { await peer.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
-      }
-    };
-
-    const onOffer = async ({ fromSocketId, offer }) => {
-      if (!localStreamRef.current) return;
-      const peer = createPeer(fromSocketId, false);
-      await peer.setRemoteDescription(new RTCSessionDescription(offer));
-      await flushIce(fromSocketId, peer);
-      const answer = await peer.createAnswer();
-      await peer.setLocalDescription(answer);
-      socket.emit("voice:answer", { targetSocketId: fromSocketId, answer });
-    };
-
-    const onAnswer = async ({ fromSocketId, answer }) => {
-      const peer = peersRef.current.get(fromSocketId);
-      if (!peer) return;
-      await peer.setRemoteDescription(new RTCSessionDescription(answer));
-      await flushIce(fromSocketId, peer);
-    };
-
-    const onIce = async ({ fromSocketId, candidate }) => {
-      const peer = peersRef.current.get(fromSocketId);
-      if (!candidate) return;
-      if (peer?.remoteDescription) {
-        try { await peer.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
-        return;
-      }
-      const queued = pendingIceRef.current.get(fromSocketId) || [];
-      queued.push(candidate);
-      pendingIceRef.current.set(fromSocketId, queued);
-    };
-
-    const onUserLeft = ({ socketId }) => {
-      peersRef.current.get(socketId)?.close();
-      peersRef.current.delete(socketId);
-      pendingIceRef.current.delete(socketId);
-      document.getElementById(`audio-${socketId}`)?.remove();
-    };
-
-    socket.on("voice:offer", onOffer);
-    socket.on("voice:answer", onAnswer);
-    socket.on("voice:ice-candidate", onIce);
-    socket.on("voice:user-left", onUserLeft);
-
-    return () => {
-      socket.off("voice:offer", onOffer);
-      socket.off("voice:answer", onAnswer);
-      socket.off("voice:ice-candidate", onIce);
-      socket.off("voice:user-left", onUserLeft);
-    };
-  }, [users, roomId]);
-
-  useEffect(() => {
-    if (!voiceOn) return;
-    users.filter((user) => user.socketId !== socket.id).forEach((user) => createPeer(user.socketId, true));
-  }, [users, voiceOn]);
 
   const loadImage = (file) => {
     if (!file) return;

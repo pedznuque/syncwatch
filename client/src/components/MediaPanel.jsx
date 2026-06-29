@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Clock3, FastForward, Globe2, Maximize2, MonitorPlay, MonitorUp, Pause, Play, Rewind, RotateCw, SendHorizontal, Volume2, VolumeX, X, Settings } from "lucide-react";
+import { Clock3, FastForward, Globe2, Maximize2, MonitorPlay, Pause, Play, Rewind, RotateCw, SendHorizontal, Volume2, VolumeX, X, Settings } from "lucide-react";
 import { socket } from "../utils/socket.js";
-import { detectWebMedia, extractYouTubeId, isWebUrl } from "../utils/mediaProviders.js";
+import { extractYouTubeId, isWebUrl } from "../utils/mediaProviders.js";
 import FullscreenChatOverlay from "./FullscreenChatOverlay.jsx";
-import ScreenSharePanel from "./ScreenSharePanel.jsx";
 import DesktopWebPlayer from "./DesktopWebPlayer.jsx";
 
 function loadYouTubeApi() {
@@ -40,7 +39,7 @@ function parseTime(value) {
   return null;
 }
 
-export default function MediaPanel({ roomId, state, screenShare, username, isHost }) {
+export default function MediaPanel({ roomId, state, username, isHost }) {
   const videoRef = useRef(null);
   const youtubeRef = useRef(null);
   const ytPlayerRef = useRef(null);
@@ -65,7 +64,7 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
   const [timestampDraft, setTimestampDraft] = useState("");
   const isDesktop = Boolean(window.syncwatchDesktop?.isDesktop);
   
-  const VALID_MODES = ["direct-video", "youtube", "web", "screen-share"];
+  const VALID_MODES = ["direct-video", "youtube", "web"];
   const activeMode = VALID_MODES.includes(mode) ? mode : "direct-video";
 
   useEffect(() => {
@@ -80,11 +79,6 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
     setCurrentTime(Number(state.currentTime || 0));
     setIsPlaying(Boolean(state.isPlaying));
   }, [state]);
-
-  useEffect(() => {
-    if (screenShare) setMode("screen-share");
-  }, [screenShare]);
-
 
   useEffect(() => {
     if (activeMode !== "youtube" || !youtubeId || !youtubeRef.current) return;
@@ -206,7 +200,7 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
   }, [activeMode]);
 
   useEffect(() => {
-    if (["web", "screen-share"].includes(activeMode)) return;
+    if (activeMode === "web") return;
     const timer = setInterval(() => {
       if (activeMode === "youtube") {
         setCurrentTime(ytPlayerRef.current?.getCurrentTime?.() || 0);
@@ -221,7 +215,7 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
   }, [activeMode, youtubeId, videoUrl]);
 
   useEffect(() => {
-    if (!isHost || ["web", "screen-share"].includes(activeMode) || !isPlaying) return;
+    if (!isHost || activeMode === "web" || !isPlaying) return;
     const timer = setInterval(() => {
       const time = activeMode === "youtube"
         ? (ytPlayerRef.current?.getCurrentTime?.() || 0)
@@ -251,17 +245,7 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
     } else if (activeMode === "direct-video") {
       mediaData.videoUrl = cleanUrl;
     } else if (activeMode === "web") {
-      if (isDesktop) {
-        mediaData.externalUrl = cleanUrl;
-        socket.emit("room:set-media", mediaData);
-        setDraftUrl("");
-        return;
-      }
-      const detected = detectWebMedia(cleanUrl);
-      if (!detected) {
-        return alert("This site cannot be controlled safely by a browser. Use a YouTube link, a direct .mp4/.webm link, or choose Screen Share.");
-      }
-      mediaData = { ...mediaData, ...detected, mode: detected.mode };
+      mediaData.externalUrl = cleanUrl;
     }
 
     socket.emit("room:set-media", mediaData);
@@ -351,8 +335,7 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
     const labels = {
       "direct-video": "Direct",
       "youtube": "YouTube",
-      "web": "Web",
-      "screen-share": "Screen share"
+      "web": "Web"
     };
     return labels[activeMode] || "Direct";
   };
@@ -361,8 +344,7 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
     const placeholders = {
       "direct-video": "Paste direct .mp4 or .webm URL",
       "youtube": "Paste YouTube URL (youtube.com/watch?v=...)",
-      "web": isDesktop ? "Paste a Bilibili, Viu, or other website URL" : "Paste a YouTube or direct video URL",
-      "screen-share": "Choose a browser tab to share"
+      "web": "Paste the streaming page URL opened by every viewer"
     };
     return placeholders[activeMode] || "Paste URL";
   };
@@ -372,11 +354,11 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
       <div className="panel-header media-header">
         <div>
           <h2><MonitorPlay size={22} /> Media</h2>
-          <p>Watch supported web videos locally in sync, or use Screen Share as a fallback.</p>
+          <p>Every viewer streams from the original website while SyncWatch keeps playback aligned.</p>
         </div>
         <div className="header-controls">
           <span className="mode-chip">{getModeLabel()}</span>
-          {isHost && !["web", "screen-share"].includes(activeMode) && <div className="quality-selector-wrap">
+          {isHost && activeMode !== "web" && <div className="quality-selector-wrap">
             <button 
               className="quality-btn" 
               onClick={() => setShowQualityMenu(!showQualityMenu)}
@@ -410,18 +392,18 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
       </div>
 
       <div className="mode-tabs segmented web-mode-tabs">
-        {["web", "youtube", "direct-video", "screen-share"].map(m => (
+        {["web", "youtube", "direct-video"].map(m => (
           <button
             key={m}
             className={activeMode === m ? "active" : ""}
             onClick={() => setMode(m)}
           >
-            {m === "direct-video" ? "Direct" : m === "youtube" ? "YouTube" : m === "screen-share" ? <><MonitorUp size={16} /> Screen Share</> : <><Globe2 size={16} /> Web</>}
+            {m === "direct-video" ? "Direct" : m === "youtube" ? "YouTube" : <><Globe2 size={16} /> Web</>}
           </button>
         ))}
       </div>
 
-      {activeMode !== "screen-share" && <div className="media-input elevated-input">
+      <div className="media-input elevated-input">
         <input
           value={draftUrl}
           placeholder={getPlaceholder()}
@@ -430,17 +412,9 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
           onKeyDown={(event) => event.key === "Enter" && setMedia()}
         />
         <button className="primary" disabled={!isHost} onClick={setMedia}><SendHorizontal size={17} /> Set</button>
-      </div>}
+      </div>
 
-      {activeMode === "screen-share" ? (
-        <ScreenSharePanel
-          roomId={roomId}
-          shareInfo={screenShare}
-          username={username}
-          canShare={isHost}
-          embedded
-        />
-      ) : activeMode === "web" && isDesktop && webUrl ? (
+      {activeMode === "web" && isDesktop && webUrl ? (
         <DesktopWebPlayer
           roomId={roomId}
           url={webUrl}
@@ -452,10 +426,10 @@ export default function MediaPanel({ roomId, state, screenShare, username, isHos
         <div className="external-card web-sync-card supported-web-card">
           <Globe2 size={44} />
           <div>
-            <h3>Extension-free synchronized Web mode</h3>
-            <p>{isDesktop ? "Paste any website URL above. Each participant loads the site locally and signs in with their own account." : "Paste a YouTube or direct .mp4/.webm link above. Install the SyncWatch desktop app for embedded Bilibili, Viu, and other website players."}</p>
+            <h3>Synchronized web streaming</h3>
+            <p>Install the SyncWatch browser extension, enter room <strong>{roomId}</strong>, then open the same streaming page in every browser. The host's HTML5 player controls play, pause, seek, and playback speed for the room.</p>
+            {webState?.title && <p className="web-sync-live">Connected media: {webState.title} · {webState.paused ? "paused" : "playing"}</p>}
           </div>
-          <button className="ghost" onClick={() => setMode("screen-share")}><MonitorUp size={17} /> Unsupported site? Use Screen Share</button>
         </div>
       ) : <div ref={playerContainerRef} className={isFullscreen ? "media-stage fullscreen" : "media-stage"}>
         {hasMedia && isHost && (
