@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SyncWatch</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <h1>SyncWatch</h1>
+      <p>Connect this website's video player to a room.</p>
+      <label>Server URL<input id="serverUrl" type="url" /></label>
+      <label>Room code<input id="roomId" inputmode="numeric" maxlength="6" placeholder="123456" /></label>
+      <label>Playback role<select id="role"><option value="viewer">Viewer</option><option value="host">Host / controller</option></select></label>
+      <label class="toggle"><input id="enabled" type="checkbox" /> Enable on streaming pages</label>
+      <button id="save">Save connection</button>
+      <div id="status">Extension is off</div>
+      <small>Each participant needs legal access to the streaming website. SyncWatch controls playback only; it does not copy or bypass protected video.</small>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

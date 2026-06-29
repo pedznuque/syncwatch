@@ -29,7 +29,20 @@ const allowOrigin = (origin, callback) => {
 };
 
 const app = express();
-app.use(cors({ origin: allowOrigin }));
+const appCors = cors({ origin: allowOrigin });
+const extensionSyncCors = cors({
+  origin(origin, callback) {
+    const allowed = /^(chrome|moz)-extension:\/\/[a-z0-9-]+$/i.test(origin || "");
+    callback(allowed ? null : new Error("Extension origin not allowed"), allowed);
+  }
+});
+app.use((req, res, next) => {
+  const isExtensionOrigin = /^(chrome|moz)-extension:\/\//i.test(req.get("Origin") || "");
+  const isExtensionSyncRoute = /^\/rooms\/\d{6}\/web-sync$/.test(req.path);
+  return isExtensionOrigin && isExtensionSyncRoute
+    ? extensionSyncCors(req, res, next)
+    : appCors(req, res, next);
+});
 app.use(express.json({ limit: "10mb" }));
 
 const server = http.createServer(app);
@@ -66,7 +79,7 @@ function createRoom(ownerName = "Host", requestedRoomId = "") {
       sourceId: "",
       updatedAt: 0
     },
-    screenShare: null,
+    voiceUsers: new Set(),
     isPlaying: false,
     currentTime: 0,
     messages: []
@@ -83,7 +96,6 @@ function publicRoom(room) {
     externalUrl: room.externalUrl,
     youtubeId: room.youtubeId,
     webSync: room.webSync,
-    screenShare: room.screenShare,
     mode: room.mode,
     isPlaying: room.isPlaying,
     currentTime: room.currentTime,
@@ -157,6 +169,11 @@ app.get("/rooms/:roomId", (req, res) => {
 
 const canControlRoom = (room, socketId) => room.hostSocketId === socketId
   || room.users.some((user) => user.socketId === socketId && user.isController);
+
+function leaveVoice(room, roomId, socketId) {
+  if (!room?.voiceUsers.delete(socketId)) return;
+  io.to(roomId).emit("voice:user-left", { roomId, socketId });
+}
 
 app.get("/rooms/:roomId/web-sync", (req, res) => {
   const room = rooms.get(req.params.roomId);
@@ -364,90 +381,64 @@ io.on("connection", (socket) => {
   socket.on("room:leave", ({ roomId }) => {
     const room = rooms.get(roomId);
     if (!room) return;
-    if (room.screenShare?.userId === socket.id) {
-      room.screenShare = null;
-      io.to(roomId).emit("screen:stopped", { userId: socket.id, username: "Guest" });
-    }
+    leaveVoice(room, roomId, socket.id);
     const leavingUser = room.users.find((user) => user.socketId === socket.id);
     room.users = room.users.filter((user) => user.socketId !== socket.id);
     socket.leave(roomId);
     if (room.hostSocketId === socket.id) room.hostSocketId = room.users[0]?.socketId || null;
     io.to(roomId).emit("room:users", room.users);
     io.to(roomId).emit("room:host", room.hostSocketId);
-    io.to(roomId).emit("voice:user-left", { socketId: socket.id });
     if (leavingUser) {
       const message = addSystemMessage(room, `${leavingUser.username} left the room`);
       io.to(roomId).emit("chat:message", message);
     }
   });
 
-  // WebRTC signaling for voice chat. Actual audio is peer-to-peer in browser.
+  // Voice presence prevents offers from being discarded before the other user
+  // has enabled their microphone. The clients use deterministic offerers to
+  // avoid two simultaneous offers (WebRTC glare).
+  socket.on("voice:join", ({ roomId }) => {
+    const room = rooms.get(roomId);
+    if (!room?.users.some((user) => user.socketId === socket.id)) return;
+    const peers = [...room.voiceUsers].filter((socketId) => socketId !== socket.id);
+    const wasJoined = room.voiceUsers.has(socket.id);
+    room.voiceUsers.add(socket.id);
+    socket.emit("voice:peers", { roomId, socketIds: peers });
+    if (!wasJoined) socket.to(roomId).emit("voice:user-joined", { roomId, socketId: socket.id });
+  });
+
+  socket.on("voice:leave", ({ roomId }) => leaveVoice(rooms.get(roomId), roomId, socket.id));
+
+  // WebRTC signaling for voice chat. Actual audio remains peer-to-peer and is
+  // relayed through TURN only when direct connections cannot cross the NAT.
   socket.on("voice:offer", ({ roomId, targetSocketId, offer }) => {
+    const room = rooms.get(roomId);
+    if (!room?.voiceUsers.has(socket.id) || !room.voiceUsers.has(targetSocketId)) return;
     io.to(targetSocketId).emit("voice:offer", {
+      roomId,
       fromSocketId: socket.id,
       offer
     });
   });
 
-  socket.on("voice:answer", ({ targetSocketId, answer }) => {
+  socket.on("voice:answer", ({ roomId, targetSocketId, answer }) => {
+    const room = rooms.get(roomId);
+    if (!room?.voiceUsers.has(socket.id) || !room.voiceUsers.has(targetSocketId)) return;
     io.to(targetSocketId).emit("voice:answer", {
+      roomId,
       fromSocketId: socket.id,
       answer
     });
   });
 
-  socket.on("voice:ice-candidate", ({ targetSocketId, candidate }) => {
+  socket.on("voice:ice-candidate", ({ roomId, targetSocketId, candidate }) => {
+    const room = rooms.get(roomId);
+    if (!room?.voiceUsers.has(socket.id) || !room.voiceUsers.has(targetSocketId)) return;
     io.to(targetSocketId).emit("voice:ice-candidate", {
+      roomId,
       fromSocketId: socket.id,
       candidate
     });
-  });
-
-  // WebRTC signaling for screen sharing
-  socket.on("screen:start", ({ roomId }) => {
-    const room = rooms.get(roomId);
-    if (!room || !canControlRoom(room, socket.id)) return;
-    const user = room.users.find((item) => item.socketId === socket.id);
-    room.screenShare = {
-      userId: socket.id,
-      username: user?.username || "Guest",
-      startedAt: Date.now()
-    };
-    io.to(roomId).emit("screen:started", room.screenShare);
-  });
-
-  socket.on("screen:stop", ({ roomId }) => {
-    const room = rooms.get(roomId);
-    if (!room || room.screenShare?.userId !== socket.id) return;
-    const user = room.users.find((item) => item.socketId === socket.id);
-    room.screenShare = null;
-    io.to(roomId).emit("screen:stopped", {
-      userId: socket.id,
-      username: user?.username || "Guest"
-    });
-  });
-
-  socket.on("screen:request", ({ roomId, sharerSocketId }) => {
-    const room = rooms.get(roomId);
-    if (!room || room.screenShare?.userId !== sharerSocketId || sharerSocketId === socket.id) return;
-    io.to(sharerSocketId).emit("screen:request", {
-      fromSocketId: socket.id
-    });
-  });
-
-  socket.on("screen:offer", ({ roomId, targetSocketId, offer }) => {
-    if (!rooms.get(roomId)?.users.some((user) => user.socketId === targetSocketId)) return;
-    io.to(targetSocketId).emit("screen:offer", { fromSocketId: socket.id, offer });
-  });
-
-  socket.on("screen:answer", ({ roomId, targetSocketId, answer }) => {
-    if (!rooms.get(roomId)?.users.some((user) => user.socketId === targetSocketId)) return;
-    io.to(targetSocketId).emit("screen:answer", { fromSocketId: socket.id, answer });
-  });
-
-  socket.on("screen:ice-candidate", ({ roomId, targetSocketId, candidate }) => {
-    if (!rooms.get(roomId)?.users.some((user) => user.socketId === targetSocketId)) return;
-    io.to(targetSocketId).emit("screen:ice-candidate", { fromSocketId: socket.id, candidate });
   });
 
   socket.on("disconnect", () => {
@@ -460,17 +451,13 @@ io.on("connection", (socket) => {
         room.hostSocketId = room.users[0]?.socketId || null;
       }
 
-      if (room.screenShare?.userId === socket.id) {
-        room.screenShare = null;
-        io.to(roomId).emit("screen:stopped", { userId: socket.id, username: "Guest" });
-      }
+      leaveVoice(room, roomId, socket.id);
 
       if (before !== room.users.length) {
         const message = addSystemMessage(room, `${leavingUser?.username || "A friend"} left the room`);
         io.to(roomId).emit("chat:message", message);
         io.to(roomId).emit("room:users", room.users);
         io.to(roomId).emit("room:host", room.hostSocketId);
-        io.to(roomId).emit("voice:user-left", { socketId: socket.id });
       }
 
       if (room.users.length === 0) {

@@ -40,9 +40,10 @@ await Promise.all([waitFor(host, "connect"), waitFor(guest, "connect")]);
 
 host.emit("room:join", { roomId: created.roomId, username: "Host" });
 const hostState = await waitFor(host, "room:state");
+const usersReceived = waitFor(host, "room:users", (nextUsers) => nextUsers.some((user) => user.username === "Guest"));
 guest.emit("room:join", { roomId: created.roomId, username: "Guest" });
 await waitFor(guest, "room:state");
-const users = await waitFor(host, "room:users");
+const users = await usersReceived;
 const guestUser = users.find((user) => user.username === "Guest");
 if (!guestUser) throw new Error("Guest did not join");
 
@@ -62,6 +63,47 @@ guest.emit("room:set-media", {
 });
 const media = await mediaReceived;
 if (media.externalUrl !== "https://www.bilibili.tv/") throw new Error("Moderator media control failed");
+
+const webSyncResponse = await fetch(`${baseUrl}/rooms/${created.roomId}/web-sync`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Origin: "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+  },
+  body: JSON.stringify({
+    url: "https://www.bilibili.tv/",
+    title: "Extension test",
+    currentTime: 42,
+    paused: false,
+    playbackRate: 1,
+    sourceId: "smoke-test"
+  })
+});
+if (webSyncResponse.headers.get("access-control-allow-origin") !== "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+  || !webSyncResponse.ok || (await webSyncResponse.json()).currentTime !== 42) {
+  throw new Error("Extension web-sync endpoint failed");
+}
+
+const hostVoicePeers = waitFor(host, "voice:peers");
+host.emit("voice:join", { roomId: created.roomId });
+if ((await hostVoicePeers).socketIds.length !== 0) throw new Error("Unexpected host voice peers");
+const guestVoicePeers = waitFor(guest, "voice:peers");
+const guestJoinedVoice = waitFor(host, "voice:user-joined", (event) => event.socketId === guest.id);
+guest.emit("voice:join", { roomId: created.roomId });
+const [voicePeers] = await Promise.all([guestVoicePeers, guestJoinedVoice]);
+if (!voicePeers.socketIds.includes(host.id)) throw new Error("Voice presence discovery failed");
+
+const relayedOffer = waitFor(guest, "voice:offer");
+host.emit("voice:offer", {
+  roomId: created.roomId,
+  targetSocketId: guest.id,
+  offer: { type: "offer", sdp: "smoke-test" }
+});
+if ((await relayedOffer).roomId !== created.roomId) throw new Error("Voice signaling relay failed");
+
+const guestLeftVoice = waitFor(host, "voice:user-left", (event) => event.socketId === guest.id);
+guest.emit("voice:leave", { roomId: created.roomId });
+await guestLeftVoice;
 
 host.disconnect();
 guest.disconnect();
