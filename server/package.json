@@ -8,10 +8,11 @@
     "start": "node index.js"
   },
   "dependencies": {
+    "archiver": "^8.0.0",
     "cors": "latest",
     "express": "latest",
-    "socket.io": "latest",
-    "nanoid": "latest"
+    "nanoid": "latest",
+    "socket.io": "latest"
   },
   "devDependencies": {
     "nodemon": "latest"

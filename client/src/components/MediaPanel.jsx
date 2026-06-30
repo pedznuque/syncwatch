@@ -3,7 +3,7 @@ import { Clock3, FastForward, Globe2, Maximize2, MonitorPlay, Pause, Play, Rewin
 import { socket } from "../utils/socket.js";
 import { extractYouTubeId, isWebUrl } from "../utils/mediaProviders.js";
 import FullscreenChatOverlay from "./FullscreenChatOverlay.jsx";
-import DesktopWebPlayer from "./DesktopWebPlayer.jsx";
+import WebStreamPanel from "./WebStreamPanel.jsx";
 
 function loadYouTubeApi() {
   if (window.YT?.Player) return Promise.resolve(window.YT);
@@ -246,6 +246,13 @@ export default function MediaPanel({ roomId, state, username, isHost }) {
       mediaData.videoUrl = cleanUrl;
     } else if (activeMode === "web") {
       mediaData.externalUrl = cleanUrl;
+      if (!isDesktop) {
+        const popup = window.open(cleanUrl, `syncwatch-stream-${roomId}`, "popup=yes,width=1280,height=800,resizable=yes,scrollbars=yes");
+        if (popup) {
+          try { popup.opener = null; } catch {}
+          popup.focus();
+        }
+      }
     }
 
     socket.emit("room:set-media", mediaData);
@@ -414,23 +421,14 @@ export default function MediaPanel({ roomId, state, username, isHost }) {
         <button className="primary" disabled={!isHost} onClick={setMedia}><SendHorizontal size={17} /> Set</button>
       </div>
 
-      {activeMode === "web" && isDesktop && webUrl ? (
-        <DesktopWebPlayer
+      {activeMode === "web" ? (
+        <WebStreamPanel
           roomId={roomId}
-          url={webUrl}
-          canControl={isHost}
-          initialTime={state?.currentTime}
-          initialPlaying={state?.isPlaying}
+          webUrl={webUrl}
+          webState={webState}
+          isHost={isHost}
+          isDesktop={isDesktop}
         />
-      ) : activeMode === "web" ? (
-        <div className="external-card web-sync-card supported-web-card">
-          <Globe2 size={44} />
-          <div>
-            <h3>Synchronized web streaming</h3>
-            <p>Install the SyncWatch browser extension, enter room <strong>{roomId}</strong>, then open the same streaming page in every browser. The host's HTML5 player controls play, pause, seek, and playback speed for the room.</p>
-            {webState?.title && <p className="web-sync-live">Connected media: {webState.title} · {webState.paused ? "paused" : "playing"}</p>}
-          </div>
-        </div>
       ) : <div ref={playerContainerRef} className={isFullscreen ? "media-stage fullscreen" : "media-stage"}>
         {hasMedia && isHost && (
           <div className="player-overlay-actions">

@@ -4,6 +4,7 @@ const DEFAULT_CONFIG = {
   roomId: "",
   role: "viewer"
 };
+const HOST_SOURCE_ID = `extension-host:${chrome.runtime.id}`;
 
 let config = { ...DEFAULT_CONFIG };
 let activeVideo = null;
@@ -46,7 +47,8 @@ async function publish(eventType) {
     duration: Number.isFinite(activeVideo.duration) ? activeVideo.duration : 0,
     paused: activeVideo.paused,
     playbackRate: Number(activeVideo.playbackRate || 1),
-    sourceId: chrome.runtime.id
+    sourceId: HOST_SOURCE_ID,
+    playerDetected: true
   });
   setStatus(response?.ok ? `Host connected - ${eventType}` : response?.error || "Cannot reach SyncWatch");
 }
@@ -92,6 +94,7 @@ function showPlaybackPrompt() {
 async function applyRemoteState(state) {
   if (!activeVideo || !state || state.seq <= lastSequence) return;
   lastSequence = state.seq;
+  if (config.role === "host" && state.sourceId === HOST_SOURCE_ID) return;
   suppressUntil = Date.now() + 1200;
   const elapsed = state.paused ? 0 : Math.max(0, (Date.now() - Number(state.updatedAt || Date.now())) / 1000);
   const targetTime = Number(state.currentTime || 0) + elapsed * Number(state.playbackRate || 1);
@@ -107,7 +110,7 @@ async function applyRemoteState(state) {
 }
 
 async function poll() {
-  if (!config.enabled || config.role !== "viewer") return;
+  if (!config.enabled) return;
   const response = await request("GET");
   if (response?.ok) await applyRemoteState(response.data);
   else setStatus(response?.error || "Cannot reach SyncWatch");
@@ -129,10 +132,8 @@ function restart() {
   };
   scan();
   scanTimer = setInterval(scan, 1500);
-  if (config.role === "viewer") {
-    poll();
-    pollTimer = setInterval(poll, 1000);
-  }
+  poll();
+  pollTimer = setInterval(poll, 1000);
 }
 
 chrome.storage.local.get(DEFAULT_CONFIG, (stored) => {

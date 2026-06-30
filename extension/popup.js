@@ -5,7 +5,7 @@ const defaults = {
   role: "viewer",
   syncwatchLastStatus: "Extension is off"
 };
-const fields = Object.fromEntries(["serverUrl", "roomId", "role", "enabled", "status", "save"].map((id) => [id, document.getElementById(id)]));
+const fields = Object.fromEntries(["serverUrl", "roomId", "role", "enabled", "status", "save", "openStream"].map((id) => [id, document.getElementById(id)]));
 
 chrome.storage.local.get(defaults, (config) => {
   fields.serverUrl.value = config.serverUrl;
@@ -32,6 +32,23 @@ fields.save.addEventListener("click", () => {
   chrome.storage.local.set({ enabled: fields.enabled.checked, serverUrl, roomId, role: fields.role.value }, () => {
     fields.status.textContent = fields.enabled.checked ? "Saved - open or refresh the video page" : "Extension is off";
   });
+});
+
+fields.openStream.addEventListener("click", async () => {
+  const config = await chrome.storage.local.get(defaults);
+  if (!config.enabled || !/^\d{6}$/.test(config.roomId)) {
+    fields.status.textContent = "Save and enable a valid room first.";
+    return;
+  }
+  fields.status.textContent = "Finding the room stream...";
+  const response = await chrome.runtime.sendMessage({ type: "syncwatch:request", method: "GET", config });
+  const url = response?.data?.url;
+  if (!response?.ok || !url) {
+    fields.status.textContent = response?.error || "No stream link is set in this room.";
+    return;
+  }
+  await chrome.windows.create({ url, type: "popup", width: 1280, height: 800, focused: true });
+  fields.status.textContent = "Stream window opened - waiting for video.";
 });
 
 chrome.storage.onChanged.addListener((changes) => {

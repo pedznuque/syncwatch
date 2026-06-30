@@ -9,4 +9,5 @@ input, select, button { box-sizing: border-box; width: 100%; min-height: 38px; b
 .toggle { display: flex; align-items: center; gap: 8px; }
 .toggle input { width: 17px; min-height: 17px; }
 button { border: 0; background: #4f46e5; font-weight: 800; cursor: pointer; }
+button.secondary { border: 1px solid #3d4b70; background: #1a2442; }
 #status { border-radius: 8px; padding: 9px 10px; background: #16213d; color: #a5b4fc; font-size: 12px; }
