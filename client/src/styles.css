@@ -551,6 +551,19 @@ button.danger, .danger { background: rgba(239, 68, 68, 0.22); color: #fecaca; }
   backdrop-filter: blur(9px);
 }
 .web-capture-status { margin: -7px 0 0; color: #a5b4fc; font-size: 12px; }
+.web-capture-placeholder {
+  display: grid;
+  gap: 6px;
+  min-height: 130px;
+  place-content: center;
+  padding: 22px;
+  border: 1px dashed rgba(129, 140, 248, .42);
+  border-radius: 16px;
+  color: #c7d2fe;
+  text-align: center;
+  background: rgba(15, 23, 42, .66);
+}
+.web-capture-placeholder span { max-width: 580px; color: #94a3b8; font-size: 12px; line-height: 1.5; }
 .desktop-web-player {
   position: relative;
   width: 100%;

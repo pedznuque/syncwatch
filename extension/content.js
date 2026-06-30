@@ -110,6 +110,23 @@ async function acknowledgeCommand(commandId, error = "") {
   });
 }
 
+function getLocalMediaUrl(video) {
+  const candidate = video?.currentSrc || video?.src || video?.getAttribute?.("src") || "";
+  try {
+    const parsed = new URL(candidate, location.href);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.toString() : "";
+  } catch { return ""; }
+}
+
+function notifyLocalMedia(video) {
+  chrome.runtime.sendMessage({
+    type: "syncwatch:register-stream-tab",
+    roomId: config.roomId,
+    role: config.role,
+    mediaUrl: getLocalMediaUrl(video)
+  });
+}
+
 function bindVideo(video) {
   if (activeVideo === video) return;
   activeVideo = video;
@@ -120,7 +137,10 @@ function bindVideo(video) {
     video.addEventListener("pause", () => publishIfActive("pause"));
     video.addEventListener("seeked", () => publishIfActive("seek"));
     video.addEventListener("ratechange", () => publishIfActive("rate"));
-    video.addEventListener("loadedmetadata", () => publishIfActive("ready"));
+    video.addEventListener("loadedmetadata", () => {
+      publishIfActive("ready");
+      if (activeVideo === video) notifyLocalMedia(video);
+    });
     video.addEventListener("timeupdate", () => {
       if (activeVideo !== video || Date.now() - lastPublished < 2000) return;
       lastPublished = Date.now();
@@ -128,11 +148,7 @@ function bindVideo(video) {
     });
   }
   setStatus(`Video detected - ${config.role}`);
-  chrome.runtime.sendMessage({
-    type: "syncwatch:register-stream-tab",
-    roomId: config.roomId,
-    role: config.role
-  });
+  notifyLocalMedia(video);
   if (config.role === "host") publish("ready");
 }
 
@@ -222,10 +238,21 @@ chrome.storage.local.get(DEFAULT_CONFIG, (stored) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== "syncwatch:consume-tab-capture" || !isSyncWatchRoomPage()) return false;
+  if (!isSyncWatchRoomPage()) return false;
+  if (!["syncwatch:local-media-detected", "syncwatch:consume-tab-capture"].includes(message?.type)) return false;
   const pathRoomId = location.pathname.match(/^\/room\/(\d{6})/)?.[1];
   if (message.roomId !== pathRoomId) {
     sendResponse({ ok: false, error: "The capture belongs to a different room." });
+    return false;
+  }
+  if (message?.type === "syncwatch:local-media-detected") {
+    window.postMessage({
+      type: "syncwatch:local-media-detected",
+      mediaUrl: message.mediaUrl,
+      roomId: message.roomId,
+      sourceTabId: message.sourceTabId
+    }, location.origin);
+    sendResponse({ ok: true });
     return false;
   }
   window.postMessage({
@@ -240,6 +267,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 window.addEventListener("message", async (event) => {
   if (event.source !== window || event.origin !== location.origin || !isSyncWatchRoomPage()) return;
+  if (event.data?.type === "syncwatch:local-media-playback") {
+    const response = await chrome.runtime.sendMessage({
+      type: "syncwatch:set-stream-muted",
+      roomId: config.roomId,
+      muted: Boolean(event.data.playing)
+    });
+    if (!response?.ok) setStatus(response?.error || "Could not update stream-tab audio");
+    return;
+  }
   if (event.data?.type !== "syncwatch:room-context") return;
   const pathRoomId = location.pathname.match(/^\/room\/(\d{6})/)?.[1];
   const roomId = String(event.data.roomId || "");

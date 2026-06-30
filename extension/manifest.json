@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SyncWatch Web Player",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Synchronize HTML5 video playback through a SyncWatch room.",
   "permissions": ["activeTab", "storage", "tabCapture", "tabs", "windows"],
   "host_permissions": ["<all_urls>"],
