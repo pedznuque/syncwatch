@@ -3,17 +3,17 @@ const defaults = {
   serverUrl: "https://syncwatch-tgzg.onrender.com",
   roomId: "",
   role: "viewer",
-  autoTheater: true,
+  autoFullscreen: true,
   syncwatchLastStatus: "Extension is off"
 };
-const fields = Object.fromEntries(["serverUrl", "roomId", "role", "enabled", "autoTheater", "status", "save", "openStream", "useThisTab"].map((id) => [id, document.getElementById(id)]));
+const fields = Object.fromEntries(["serverUrl", "roomId", "role", "enabled", "autoFullscreen", "status", "save", "openStream", "useThisTab"].map((id) => [id, document.getElementById(id)]));
 
 chrome.storage.local.get(defaults, (config) => {
   fields.serverUrl.value = config.serverUrl;
   fields.roomId.value = config.roomId;
   fields.role.value = config.role;
   fields.enabled.checked = config.enabled;
-  fields.autoTheater.checked = config.autoTheater;
+  fields.autoFullscreen.checked = config.autoFullscreen;
   fields.status.textContent = config.syncwatchLastStatus;
 });
 
@@ -31,8 +31,8 @@ fields.save.addEventListener("click", () => {
     fields.status.textContent = "Enter a valid SyncWatch server URL.";
     return;
   }
-  chrome.storage.local.set({ enabled: fields.enabled.checked, autoTheater: fields.autoTheater.checked, serverUrl, roomId, role: fields.role.value }, () => {
-    fields.status.textContent = fields.enabled.checked ? "Saved - open or refresh the video page" : "Extension is off";
+  chrome.storage.local.set({ enabled: fields.enabled.checked, autoFullscreen: fields.autoFullscreen.checked, serverUrl, roomId, role: fields.role.value }, () => {
+    fields.status.textContent = fields.enabled.checked ? `Room ${roomId} ready - open the stream` : "Video sync is off";
   });
 });
 
@@ -42,13 +42,13 @@ fields.openStream.addEventListener("click", async () => {
     fields.status.textContent = "Save and enable a valid room first.";
     return;
   }
-  fields.status.textContent = "Finding the room stream...";
+  fields.status.textContent = "Opening this room's stream...";
   const response = await chrome.runtime.sendMessage({ type: "syncwatch:open-stream-window", config });
   if (!response?.ok) {
     fields.status.textContent = response?.error || "No stream link is set in this room.";
     return;
   }
-  fields.status.textContent = "Stream window opened - waiting for video.";
+  fields.status.textContent = "Stream opened - video will be detected automatically.";
 });
 
 fields.useThisTab.addEventListener("click", async () => {
@@ -58,7 +58,7 @@ fields.useThisTab.addEventListener("click", async () => {
     return;
   }
   const response = await chrome.runtime.sendMessage({ type: "syncwatch:set-controller-tab", tabId: tab.id });
-  fields.status.textContent = response?.ok ? "This tab is now the playback controller." : response?.error || "Could not select this tab.";
+  fields.status.textContent = response?.ok ? "This video tab now follows SyncWatch controls." : response?.error || "Could not select this tab.";
 });
 
 chrome.storage.onChanged.addListener((changes) => {

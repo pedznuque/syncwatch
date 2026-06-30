@@ -9,17 +9,17 @@
   <body>
     <main>
       <h1>SyncWatch</h1>
-      <p>Connect this website's video player to a room.</p>
-      <label>Server URL<input id="serverUrl" type="url" /></label>
-      <label>Room code<input id="roomId" inputmode="numeric" maxlength="6" placeholder="123456" /></label>
+      <p>Open a SyncWatch room first. The extension detects its room code automatically.</p>
+      <label>Room code<input id="roomId" inputmode="numeric" maxlength="6" placeholder="Detected from SyncWatch" /></label>
       <label>Playback role<select id="role"><option value="viewer">Viewer</option><option value="host">Host / controller</option></select></label>
-      <label class="toggle"><input id="enabled" type="checkbox" /> Enable on streaming pages</label>
-      <label class="toggle"><input id="autoTheater" type="checkbox" /> Fill the stream window with detected video</label>
-      <button id="save">Save connection</button>
-      <button id="openStream" class="secondary">Open synchronized stream window</button>
-      <button id="useThisTab" class="secondary">Use this tab as controller</button>
+      <label class="toggle"><input id="enabled" type="checkbox" /> Sync videos in this browser</label>
+      <label class="toggle"><input id="autoFullscreen" type="checkbox" /> Fullscreen the detected stream window</label>
+      <details><summary>Advanced connection</summary><label>Server URL<input id="serverUrl" type="url" /></label></details>
+      <button id="save">Save settings</button>
+      <button id="openStream" class="secondary">Open room stream</button>
+      <button id="useThisTab" class="secondary">Control this video tab</button>
       <div id="status">Extension is off</div>
-      <small>Each participant needs legal access to the streaming website. SyncWatch controls playback only; it does not copy or bypass protected video.</small>
+      <small>Use Host only on the browser that controls playback. Everyone else should use Viewer.</small>
     </main>
     <script src="popup.js"></script>
   </body>

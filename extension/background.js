@@ -14,6 +14,26 @@ async function setController(nextController) {
   else await chrome.storage.session.remove("syncwatchController");
 }
 
+async function getStreamTabs() {
+  const stored = await chrome.storage.session.get("syncwatchStreamTabs");
+  return stored.syncwatchStreamTabs || {};
+}
+
+async function setStreamTab(roomId, tabId) {
+  const streamTabs = await getStreamTabs();
+  streamTabs[roomId] = tabId;
+  await chrome.storage.session.set({ syncwatchStreamTabs: streamTabs });
+}
+
+async function fullscreenControllerWindow(activeController) {
+  if (activeController?.fullscreenApplied) return activeController;
+  const tab = await chrome.tabs.get(activeController.tabId);
+  await chrome.windows.update(tab.windowId, { state: "fullscreen" });
+  const updatedController = { ...activeController, fullscreenApplied: true };
+  await setController(updatedController);
+  return updatedController;
+}
+
 async function returnFocusToSyncWatch(config, activeController) {
   if (!activeController?.returnFocus) return;
   let origin;
@@ -47,11 +67,11 @@ async function roomRequest(message, sender) {
     if (!Number.isInteger(tabId)) throw new Error("The controller tab is unavailable.");
     let activeController = await getController();
     if (!activeController) {
-      activeController = { tabId, frameId };
+      activeController = { tabId, frameId, returnFocus: false, fullscreenApplied: false };
       await setController(activeController);
     }
     if (activeController.tabId === tabId && activeController.frameId === null) {
-      activeController = { tabId, frameId };
+      activeController = { ...activeController, frameId };
       await setController(activeController);
     }
     if (activeController.tabId !== tabId || activeController.frameId !== frameId) {
@@ -69,7 +89,10 @@ async function roomRequest(message, sender) {
   if (message.method === "POST" && config.role === "host" && /^extension-host:/.test(body.sourceId || "") && !data.ignored) {
     const activeController = await getController();
     if (activeController?.tabId === sender.tab?.id && activeController?.frameId === Number(sender.frameId || 0)) {
-      await returnFocusToSyncWatch(config, activeController);
+      const updatedController = config.autoFullscreen === false
+        ? activeController
+        : await fullscreenControllerWindow(activeController);
+      await returnFocusToSyncWatch(config, updatedController);
     }
   }
   return { ok: true, data, ignored: Boolean(data.ignored) };
@@ -85,8 +108,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message?.type === "syncwatch:set-controller-tab") {
         const tabId = Number(message.tabId);
         if (!Number.isInteger(tabId)) throw new Error("Choose a valid stream tab.");
-        await setController({ tabId, frameId: null, returnFocus: false });
+        await setController({ tabId, frameId: null, returnFocus: false, fullscreenApplied: false });
         sendResponse({ ok: true });
+        return;
+      }
+      if (message?.type === "syncwatch:register-stream-tab") {
+        const roomId = String(message.roomId || "");
+        const tabId = sender.tab?.id;
+        if (!/^\d{6}$/.test(roomId) || !Number.isInteger(tabId)) throw new Error("The stream tab could not be registered.");
+        await setStreamTab(roomId, tabId);
+        if (message.autoFullscreen !== false) {
+          const streamWindow = await chrome.windows.get(sender.tab.windowId);
+          if (streamWindow.state !== "fullscreen") await chrome.windows.update(sender.tab.windowId, { state: "fullscreen" });
+        }
+        sendResponse({ ok: true });
+        return;
+      }
+      if (message?.type === "syncwatch:set-stream-muted") {
+        const roomId = String(message.roomId || "");
+        const streamTabs = await getStreamTabs();
+        const tabId = streamTabs[roomId];
+        if (!Number.isInteger(tabId)) throw new Error("Open the stream once so the extension can identify its tab.");
+        await chrome.tabs.update(tabId, { muted: Boolean(message.muted) });
+        sendResponse({ ok: true, muted: Boolean(message.muted) });
         return;
       }
       if (message?.type === "syncwatch:open-stream-window") {
@@ -104,7 +148,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const [activeTab] = await chrome.tabs.query({ windowId: created.id, active: true });
           tabId = activeTab?.id;
         }
-        if (Number.isInteger(tabId) && message.config?.role === "host") await setController({ tabId, frameId: null, returnFocus: true });
+        if (Number.isInteger(tabId)) {
+          await setStreamTab(String(message.config?.roomId || ""), tabId);
+          if (message.config?.role === "host") {
+            await setController({ tabId, frameId: null, returnFocus: true, fullscreenApplied: false });
+          }
+        }
         sendResponse({ ok: true, url: roomState.data.url });
         return;
       }
@@ -120,8 +169,12 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   getController().then((activeController) => {
     if (activeController?.tabId === tabId) return setController(null);
   });
+  getStreamTabs().then(async (streamTabs) => {
+    const nextTabs = Object.fromEntries(Object.entries(streamTabs).filter(([, value]) => value !== tabId));
+    await chrome.storage.session.set({ syncwatchStreamTabs: nextTabs });
+  });
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.role || changes.roomId || changes.enabled)) setController(null);
+  if (area === "local" && (changes.role || changes.roomId || changes.enabled || changes.autoFullscreen)) setController(null);
 });

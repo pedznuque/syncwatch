@@ -79,6 +79,10 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, usern
     if (!seeking) setSeekDraft(liveTime);
   }, [liveTime, seeking]);
 
+  const setSourceAudioMuted = (muted) => {
+    window.postMessage({ type: "syncwatch:mirror-source-audio", muted }, window.location.origin);
+  };
+
   const stopMirror = () => {
     const stream = mirrorStreamRef.current;
     mirrorStreamRef.current = null;
@@ -87,12 +91,24 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, usern
       track.stop();
     });
     if (mirrorVideoRef.current) mirrorVideoRef.current.srcObject = null;
+    if (stream) setSourceAudioMuted(false);
     setMirrorActive(false);
     setMirrorStatus("Mirror stopped");
   };
 
   useEffect(() => () => {
     mirrorStreamRef.current?.getTracks().forEach((track) => track.stop());
+    window.postMessage({ type: "syncwatch:mirror-source-audio", muted: false }, window.location.origin);
+  }, []);
+
+  useEffect(() => {
+    const onMirrorAudioResult = (event) => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      if (event.data?.type !== "syncwatch:mirror-source-audio-result" || !event.data.muted || event.data.ok) return;
+      setMirrorStatus(`Mirror has sound, but the source window could not be silenced: ${event.data.error}`);
+    };
+    window.addEventListener("message", onMirrorAudioResult);
+    return () => window.removeEventListener("message", onMirrorAudioResult);
   }, []);
 
   useEffect(() => {
@@ -104,15 +120,39 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, usern
   const startMirror = async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 30, max: 60 } },
-        audio: true
+        video: {
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
+          frameRate: { ideal: 60, max: 60 }
+        },
+        audio: {
+          channelCount: { ideal: 2 },
+          sampleRate: { ideal: 48000 },
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        },
+        selfBrowserSurface: "exclude",
+        surfaceSwitching: "exclude"
       });
       stopMirror();
       mirrorStreamRef.current = stream;
-      if (mirrorVideoRef.current) mirrorVideoRef.current.srcObject = stream;
+      const [videoTrack] = stream.getVideoTracks();
+      const [audioTrack] = stream.getAudioTracks();
+      if (videoTrack) videoTrack.contentHint = "detail";
+      if (audioTrack) audioTrack.contentHint = "music";
+      if (mirrorVideoRef.current) {
+        mirrorVideoRef.current.srcObject = stream;
+        mirrorVideoRef.current.muted = false;
+        mirrorVideoRef.current.volume = 1;
+        await mirrorVideoRef.current.play().catch(() => {});
+      }
       stream.getTracks().forEach((track) => { track.onended = stopMirror; });
+      setSourceAudioMuted(true);
       setMirrorActive(true);
-      setMirrorStatus("Mirroring the selected stream window locally");
+      const settings = videoTrack?.getSettings?.() || {};
+      const resolution = settings.width && settings.height ? `${settings.width}x${settings.height}` : "source resolution";
+      setMirrorStatus(`High-quality mirror active (${resolution}${audioTrack ? ", audio on" : ", no shared audio"})`);
     } catch (error) {
       if (error?.name !== "NotAllowedError") setMirrorStatus("Window mirroring is unavailable in this browser");
     }
@@ -188,7 +228,7 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, usern
       </div>
 
       <p className="web-stream-help">
-        Open the stream separately, then choose <strong>Mirror stream window</strong> and select that window or tab. This is a local mirror, not an iframe and not a broadcast to other viewers.
+        Select the stream tab and enable <strong>Share tab audio</strong>. SyncWatch keeps the captured picture at the highest resolution available and silences the separate source tab to avoid duplicate sound.
       </p>
 
       {hasLink && isHost && (
