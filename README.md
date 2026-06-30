@@ -23,9 +23,9 @@ The extension controls the primary HTML5 `<video>` element on a streaming page.
 4. Open or refresh a SyncWatch room. The app automatically supplies the room code, role, and current stream link to the extension.
 
 The GitHub Actions extension workflow also publishes a ready-to-unzip package as a build artifact.
-The running SyncWatch app provides a **Download extension** button. When the host sets or changes a web link, each participant's extension automatically opens or reuses one local stream window. The host's detected HTML5 video becomes the controller automatically, while everyone else follows as a viewer. Remote controls wait for acknowledgement from the real player before changing their displayed state.
+The running SyncWatch app provides a **Download extension** button. When the host sets or changes a web link, each participant's extension automatically opens or reuses one local stream window. The host's detected HTML5 video becomes the controller automatically, while everyone else follows as a viewer. On that stream tab, each participant can click the extension once and choose **Show this video in SyncWatch** to play their own tab's video and audio inside the room with fullscreen chat and voice controls. Remote controls wait for acknowledgement from the real player before changing their displayed state.
 
-SyncWatch shows whether no link is set, a stream window is opening, or an HTML5 video was detected. Website video remains in its original provider window because browsers and protected sites do not permit silent cross-origin embedding or capture.
+SyncWatch shows whether no link is set, a stream window is opening, or an HTML5 video was detected. Chrome requires the participant to invoke the extension once before tab capture starts. Capture remains local to that participant and is not rebroadcast; protected video may still render black and cannot be bypassed.
 
 ## Reliable voice across different networks
 

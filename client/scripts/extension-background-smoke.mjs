@@ -4,7 +4,7 @@ import vm from "node:vm";
 const source = await fs.readFile(new URL("../../extension/background.js", import.meta.url), "utf8");
 const session = {};
 const tabs = new Map();
-const calls = { created: [], updated: [], removed: [] };
+const calls = { created: [], updated: [], removed: [], sent: [], captured: [] };
 let messageListener;
 
 const chrome = {
@@ -13,6 +13,9 @@ const chrome = {
     onMessage: { addListener(listener) { messageListener = listener; } }
   },
   storage: {
+    local: {
+      async get(defaults) { return defaults; }
+    },
     session: {
       async get(key) { return { [key]: session[key] }; },
       async set(values) { Object.assign(session, values); },
@@ -31,7 +34,8 @@ const chrome = {
       calls.updated.push({ tabId, changes });
       return tab;
     },
-    async query() { return []; },
+    async query() { return [...tabs.values()].map((tab) => ({ ...tab })); },
+    async sendMessage(tabId, message) { calls.sent.push({ tabId, message }); return { ok: true }; },
     onRemoved: { addListener() {} }
   },
   windows: {
@@ -43,6 +47,9 @@ const chrome = {
     },
     async remove(windowId) { calls.removed.push(windowId); tabs.delete(501); },
     async update() {}
+  },
+  tabCapture: {
+    async getMediaStreamId(options) { calls.captured.push(options); return "smoke-stream-id"; }
   }
 };
 
@@ -76,9 +83,18 @@ if (!registered.ok || session.syncwatchController?.tabId !== 501) {
   throw new Error("Host video tab did not become the automatic controller");
 }
 
+tabs.set(700, { id: 700, windowId: 88, url: "https://syncwatch-tgzg.onrender.com/room/123456" });
+const captureContext = await send({ type: "syncwatch:capture-context", tabId: 501 });
+const captured = await send({ type: "syncwatch:start-capture", tabId: 501 });
+if (!captureContext.isStreamTab || !captured.ok
+  || calls.captured[0]?.targetTabId !== 501 || calls.captured[0]?.consumerTabId !== 700
+  || calls.sent[0]?.message.streamId !== "smoke-stream-id") {
+  throw new Error("Local stream-tab capture was not bridged into the SyncWatch room tab");
+}
+
 const closed = await send({ type: "syncwatch:auto-stream", config, url: "" });
 if (!closed.ok || !closed.closed || calls.removed[0] !== 77) {
   throw new Error("Managed stream window did not close when web media was cleared");
 }
 
-console.log(JSON.stringify({ ok: true, opened: calls.created.length, navigated: calls.updated.length, controller: 501 }));
+console.log(JSON.stringify({ ok: true, opened: calls.created.length, navigated: calls.updated.length, controller: 501, captured: true }));

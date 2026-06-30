@@ -221,6 +221,23 @@ chrome.storage.local.get(DEFAULT_CONFIG, (stored) => {
   detectRoomFromPage().then(restart);
 });
 
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "syncwatch:consume-tab-capture" || !isSyncWatchRoomPage()) return false;
+  const pathRoomId = location.pathname.match(/^\/room\/(\d{6})/)?.[1];
+  if (message.roomId !== pathRoomId) {
+    sendResponse({ ok: false, error: "The capture belongs to a different room." });
+    return false;
+  }
+  window.postMessage({
+    type: "syncwatch:tab-capture",
+    streamId: message.streamId,
+    roomId: message.roomId,
+    sourceTabId: message.sourceTabId
+  }, location.origin);
+  sendResponse({ ok: true });
+  return false;
+});
+
 window.addEventListener("message", async (event) => {
   if (event.source !== window || event.origin !== location.origin || !isSyncWatchRoomPage()) return;
   if (event.data?.type !== "syncwatch:room-context") return;

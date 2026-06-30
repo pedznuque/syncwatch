@@ -122,6 +122,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: true });
         return;
       }
+      if (message?.type === "syncwatch:capture-context") {
+        const tabId = Number(message.tabId);
+        const streamTabs = await getStreamTabs();
+        const entry = Object.entries(streamTabs).find(([, value]) => {
+          const storedTabId = Number.isInteger(value) ? value : value?.tabId;
+          return storedTabId === tabId;
+        });
+        sendResponse(entry
+          ? { ok: true, isStreamTab: true, roomId: entry[0] }
+          : { ok: true, isStreamTab: false });
+        return;
+      }
+      if (message?.type === "syncwatch:start-capture") {
+        const targetTabId = Number(message.tabId);
+        const streamTabs = await getStreamTabs();
+        const entry = Object.entries(streamTabs).find(([, value]) => {
+          const storedTabId = Number.isInteger(value) ? value : value?.tabId;
+          return storedTabId === targetTabId;
+        });
+        if (!entry) throw new Error("This is not the stream tab for an active SyncWatch room.");
+        const roomId = entry[0];
+        const storedConfig = await chrome.storage.local.get({ serverUrl: DEFAULT_SERVER });
+        const serverOrigin = new URL(storedConfig.serverUrl || DEFAULT_SERVER).origin;
+        const roomTabs = await chrome.tabs.query({});
+        const consumerTab = roomTabs.find((tab) => {
+          try { return new URL(tab.url).origin === serverOrigin && new URL(tab.url).pathname === `/room/${roomId}`; }
+          catch { return false; }
+        });
+        if (!Number.isInteger(consumerTab?.id)) throw new Error("Keep the matching SyncWatch room open, then try again.");
+        const streamId = await chrome.tabCapture.getMediaStreamId({
+          targetTabId,
+          consumerTabId: consumerTab.id
+        });
+        await chrome.tabs.sendMessage(consumerTab.id, {
+          type: "syncwatch:consume-tab-capture",
+          streamId,
+          roomId,
+          sourceTabId: targetTabId
+        });
+        await chrome.tabs.update(consumerTab.id, { active: true });
+        await chrome.windows.update(consumerTab.windowId, { focused: true });
+        sendResponse({ ok: true, roomId });
+        return;
+      }
       if (message?.type === "syncwatch:auto-stream") {
         const config = message.config || {};
         const roomId = String(config.roomId || "");
