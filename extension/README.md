@@ -7,9 +7,8 @@ This Manifest V3 extension synchronizes ordinary HTML5 video players. It never t
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked** and select this `extension` folder.
-4. Open the extension, enter the SyncWatch server URL and six-digit room code, choose **Host** on the controlling browser and **Viewer** everywhere else, then enable it.
-5. Open or refresh the same streaming page for each participant.
+4. Open or refresh a SyncWatch room. No popup setup is required.
 
-Opening a SyncWatch room automatically configures its room code in the extension. The popup then provides **Open room stream**, **Control this video tab**, and actual browser-window fullscreen. It detects the strongest HTML5 video candidate and ensures only the selected tab/frame publishes host playback state. When SyncWatch mirrors that tab, the extension can silence the separate source tab so only the mirror is heard. A controller command is shown as applied only after the real player acknowledges its state.
+Opening a SyncWatch room automatically configures its room code and role. When the host sets or changes a link, the extension opens or updates one stream window for every participant. The host's strongest HTML5 video candidate becomes the controller automatically; viewer windows follow it. A controller command is shown as applied only after the real player acknowledges its state.
 
 The extension requests access to web pages because it must locate and control their HTML5 `<video>` element. DRM, cross-origin player internals, provider terms, and autoplay rules still apply.

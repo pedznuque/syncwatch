@@ -19,19 +19,19 @@ async function getStreamTabs() {
   return stored.syncwatchStreamTabs || {};
 }
 
-async function setStreamTab(roomId, tabId) {
+async function setStreamTab(roomId, streamTab) {
   const streamTabs = await getStreamTabs();
-  streamTabs[roomId] = tabId;
+  streamTabs[roomId] = streamTab;
   await chrome.storage.session.set({ syncwatchStreamTabs: streamTabs });
 }
 
-async function fullscreenControllerWindow(activeController) {
-  if (activeController?.fullscreenApplied) return activeController;
-  const tab = await chrome.tabs.get(activeController.tabId);
-  await chrome.windows.update(tab.windowId, { state: "fullscreen" });
-  const updatedController = { ...activeController, fullscreenApplied: true };
-  await setController(updatedController);
-  return updatedController;
+async function getExistingStreamTab(roomId) {
+  const streamTabs = await getStreamTabs();
+  const stored = streamTabs[roomId];
+  const tabId = Number.isInteger(stored) ? stored : stored?.tabId;
+  if (!Number.isInteger(tabId)) return null;
+  try { return { ...(typeof stored === "object" ? stored : {}), tab: await chrome.tabs.get(tabId) }; }
+  catch { return null; }
 }
 
 async function returnFocusToSyncWatch(config, activeController) {
@@ -67,7 +67,7 @@ async function roomRequest(message, sender) {
     if (!Number.isInteger(tabId)) throw new Error("The controller tab is unavailable.");
     let activeController = await getController();
     if (!activeController) {
-      activeController = { tabId, frameId, returnFocus: false, fullscreenApplied: false };
+      activeController = { tabId, frameId, returnFocus: false };
       await setController(activeController);
     }
     if (activeController.tabId === tabId && activeController.frameId === null) {
@@ -89,10 +89,7 @@ async function roomRequest(message, sender) {
   if (message.method === "POST" && config.role === "host" && /^extension-host:/.test(body.sourceId || "") && !data.ignored) {
     const activeController = await getController();
     if (activeController?.tabId === sender.tab?.id && activeController?.frameId === Number(sender.frameId || 0)) {
-      const updatedController = config.autoFullscreen === false
-        ? activeController
-        : await fullscreenControllerWindow(activeController);
-      await returnFocusToSyncWatch(config, updatedController);
+      await returnFocusToSyncWatch(config, activeController);
     }
   }
   return { ok: true, data, ignored: Boolean(data.ignored) };
@@ -105,39 +102,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(await roomRequest(message, sender));
         return;
       }
-      if (message?.type === "syncwatch:set-controller-tab") {
-        const tabId = Number(message.tabId);
-        if (!Number.isInteger(tabId)) throw new Error("Choose a valid stream tab.");
-        await setController({ tabId, frameId: null, returnFocus: false, fullscreenApplied: false });
-        sendResponse({ ok: true });
-        return;
-      }
       if (message?.type === "syncwatch:register-stream-tab") {
         const roomId = String(message.roomId || "");
         const tabId = sender.tab?.id;
         if (!/^\d{6}$/.test(roomId) || !Number.isInteger(tabId)) throw new Error("The stream tab could not be registered.");
-        await setStreamTab(roomId, tabId);
-        if (message.autoFullscreen !== false) {
-          const streamWindow = await chrome.windows.get(sender.tab.windowId);
-          if (streamWindow.state !== "fullscreen") await chrome.windows.update(sender.tab.windowId, { state: "fullscreen" });
+        const existing = await getExistingStreamTab(roomId);
+        await setStreamTab(roomId, {
+          tabId,
+          windowId: sender.tab.windowId,
+          url: sender.tab.url || existing?.url || "",
+          managed: Boolean(existing?.managed)
+        });
+        if (message.role === "host") {
+          const activeController = await getController();
+          if (activeController?.tabId !== tabId) {
+            await setController({ tabId, frameId: null, returnFocus: Boolean(existing?.managed) });
+          }
         }
         sendResponse({ ok: true });
         return;
       }
-      if (message?.type === "syncwatch:set-stream-muted") {
-        const roomId = String(message.roomId || "");
-        const streamTabs = await getStreamTabs();
-        const tabId = streamTabs[roomId];
-        if (!Number.isInteger(tabId)) throw new Error("Open the stream once so the extension can identify its tab.");
-        await chrome.tabs.update(tabId, { muted: Boolean(message.muted) });
-        sendResponse({ ok: true, muted: Boolean(message.muted) });
-        return;
-      }
-      if (message?.type === "syncwatch:open-stream-window") {
-        const roomState = await roomRequest({ type: "syncwatch:request", method: "GET", config: message.config }, sender);
-        if (!roomState.data?.url) throw new Error("No stream link is set in this room.");
+      if (message?.type === "syncwatch:auto-stream") {
+        const config = message.config || {};
+        const roomId = String(config.roomId || "");
+        let streamUrl = String(message.url || "");
+        if (!/^\d{6}$/.test(roomId)) throw new Error("A valid SyncWatch room is required.");
+        if (!streamUrl) {
+          const existing = await getExistingStreamTab(roomId);
+          if (existing?.managed && Number.isInteger(existing.windowId)) await chrome.windows.remove(existing.windowId).catch(() => {});
+          sendResponse({ ok: true, closed: Boolean(existing?.managed) });
+          return;
+        }
+        const parsed = new URL(streamUrl);
+        if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("The stream link is invalid.");
+        streamUrl = parsed.toString();
+        const existing = await getExistingStreamTab(roomId);
+        if (existing?.tab) {
+          if (existing.tab.url !== streamUrl) await chrome.tabs.update(existing.tab.id, { url: streamUrl });
+          await setStreamTab(roomId, { tabId: existing.tab.id, windowId: existing.tab.windowId, url: streamUrl, managed: Boolean(existing.managed) });
+          if (config.role === "host") await setController({ tabId: existing.tab.id, frameId: null, returnFocus: false });
+          sendResponse({ ok: true, reused: true, url: streamUrl });
+          return;
+        }
         const created = await chrome.windows.create({
-          url: roomState.data.url,
+          url: streamUrl,
           type: "popup",
           width: 1280,
           height: 800,
@@ -149,12 +157,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           tabId = activeTab?.id;
         }
         if (Number.isInteger(tabId)) {
-          await setStreamTab(String(message.config?.roomId || ""), tabId);
-          if (message.config?.role === "host") {
-            await setController({ tabId, frameId: null, returnFocus: true, fullscreenApplied: false });
-          }
+          await setStreamTab(roomId, { tabId, windowId: created.id, url: streamUrl, managed: true });
+          if (config.role === "host") await setController({ tabId, frameId: null, returnFocus: true });
         }
-        sendResponse({ ok: true, url: roomState.data.url });
+        sendResponse({ ok: true, url: streamUrl });
         return;
       }
       sendResponse({ ok: false, error: "Unknown SyncWatch extension action." });
@@ -170,11 +176,10 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     if (activeController?.tabId === tabId) return setController(null);
   });
   getStreamTabs().then(async (streamTabs) => {
-    const nextTabs = Object.fromEntries(Object.entries(streamTabs).filter(([, value]) => value !== tabId));
+    const nextTabs = Object.fromEntries(Object.entries(streamTabs).filter(([, value]) => {
+      const storedTabId = Number.isInteger(value) ? value : value?.tabId;
+      return storedTabId !== tabId;
+    }));
     await chrome.storage.session.set({ syncwatchStreamTabs: nextTabs });
   });
-});
-
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.role || changes.roomId || changes.enabled || changes.autoFullscreen)) setController(null);
 });

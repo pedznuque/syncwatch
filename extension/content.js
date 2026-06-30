@@ -1,9 +1,8 @@
 const DEFAULT_CONFIG = {
-  enabled: false,
+  enabled: true,
   serverUrl: "https://syncwatch-tgzg.onrender.com",
   roomId: "",
-  role: "viewer",
-  autoFullscreen: true
+  role: "viewer"
 };
 const HOST_SOURCE_ID = `extension-host:${chrome.runtime.id}`;
 let hostSourceId = HOST_SOURCE_ID;
@@ -132,7 +131,7 @@ function bindVideo(video) {
   chrome.runtime.sendMessage({
     type: "syncwatch:register-stream-tab",
     roomId: config.roomId,
-    autoFullscreen: config.autoFullscreen
+    role: config.role
   });
   if (config.role === "host") publish("ready");
 }
@@ -199,8 +198,8 @@ function restart() {
     setStatus(`Room ${config.roomId || ""} detected automatically`.trim());
     return;
   }
-  if (!config.enabled || !/^\d{6}$/.test(config.roomId)) {
-    setStatus("Extension is off");
+  if (!/^\d{6}$/.test(config.roomId)) {
+    setStatus("Open a SyncWatch room to connect automatically");
     return;
   }
   const scan = () => {
@@ -224,18 +223,26 @@ chrome.storage.local.get(DEFAULT_CONFIG, (stored) => {
 
 window.addEventListener("message", async (event) => {
   if (event.source !== window || event.origin !== location.origin || !isSyncWatchRoomPage()) return;
-  if (event.data?.type !== "syncwatch:mirror-source-audio") return;
-  const response = await chrome.runtime.sendMessage({
-    type: "syncwatch:set-stream-muted",
-    roomId: config.roomId,
-    muted: Boolean(event.data.muted)
+  if (event.data?.type !== "syncwatch:room-context") return;
+  const pathRoomId = location.pathname.match(/^\/room\/(\d{6})/)?.[1];
+  const roomId = String(event.data.roomId || "");
+  if (!pathRoomId || roomId !== pathRoomId) return;
+  const role = event.data.role === "host" ? "host" : "viewer";
+  const nextConfig = { ...config, roomId, role, serverUrl: location.origin, enabled: true };
+  config = nextConfig;
+  await chrome.storage.local.set({
+    roomId,
+    role,
+    serverUrl: location.origin,
+    enabled: true,
+    syncwatchLastStatus: `Room ${roomId} - ${role === "host" ? "automatic host controller" : "automatic viewer"}`
   });
-  window.postMessage({
-    type: "syncwatch:mirror-source-audio-result",
-    muted: Boolean(event.data.muted),
-    ok: Boolean(response?.ok),
-    error: response?.error || ""
-  }, location.origin);
+  const response = await chrome.runtime.sendMessage({
+    type: "syncwatch:auto-stream",
+    config: nextConfig,
+    url: String(event.data.url || "")
+  });
+  if (!response?.ok) setStatus(response?.error || "Could not open the room stream automatically");
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
