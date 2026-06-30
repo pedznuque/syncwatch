@@ -3,7 +3,7 @@ const DEFAULT_CONFIG = {
   serverUrl: "https://syncwatch-tgzg.onrender.com",
   roomId: "",
   role: "viewer",
-  autoTheater: true
+  autoFullscreen: true
 };
 const HOST_SOURCE_ID = `extension-host:${chrome.runtime.id}`;
 let hostSourceId = HOST_SOURCE_ID;
@@ -16,8 +16,6 @@ let lastPublished = 0;
 let pollTimer = null;
 let scanTimer = null;
 const boundVideos = new WeakSet();
-let theaterVideo = null;
-let theaterStyle = null;
 
 function request(method, body) {
   return chrome.runtime.sendMessage({ type: "syncwatch:request", method, config, body });
@@ -55,24 +53,23 @@ function scoreVideo(video) {
     + (Number.isFinite(video.duration) && video.duration > 30 ? 150_000 : 0);
 }
 
-function restoreTheater() {
-  if (!theaterVideo) return;
-  if (theaterStyle === null) theaterVideo.removeAttribute("style");
-  else theaterVideo.setAttribute("style", theaterStyle);
-  theaterVideo = null;
-  theaterStyle = null;
+function isSyncWatchRoomPage() {
+  let serverOrigin;
+  try { serverOrigin = new URL(config.serverUrl || DEFAULT_CONFIG.serverUrl).origin; } catch { return false; }
+  return location.origin === serverOrigin && /^\/room\/\d{6}\/?$/.test(location.pathname);
 }
 
-function applyTheater(video) {
-  if (!config.autoTheater || config.role !== "host" || theaterVideo === video) return;
-  restoreTheater();
-  theaterVideo = video;
-  theaterStyle = video.getAttribute("style");
-  Object.assign(video.style, {
-    position: "fixed", inset: "0", width: "100vw", height: "100vh",
-    maxWidth: "none", maxHeight: "none", objectFit: "contain",
-    background: "black", zIndex: "2147483646"
+async function detectRoomFromPage() {
+  if (!isSyncWatchRoomPage()) return false;
+  const roomId = location.pathname.match(/^\/room\/(\d{6})/)?.[1];
+  if (!roomId) return false;
+  await chrome.storage.local.set({
+    roomId,
+    serverUrl: location.origin,
+    enabled: true,
+    syncwatchLastStatus: `Room ${roomId} detected automatically`
   });
+  return true;
 }
 
 async function publish(eventType) {
@@ -94,7 +91,6 @@ async function publish(eventType) {
     return;
   }
   if (response?.data?.sourceId) hostSourceId = response.data.sourceId;
-  if (response?.ok) applyTheater(activeVideo);
   setStatus(response?.ok ? `Host connected - ${eventType}` : response?.error || "Cannot reach SyncWatch");
 }
 
@@ -133,6 +129,11 @@ function bindVideo(video) {
     });
   }
   setStatus(`Video detected - ${config.role}`);
+  chrome.runtime.sendMessage({
+    type: "syncwatch:register-stream-tab",
+    roomId: config.roomId,
+    autoFullscreen: config.autoFullscreen
+  });
   if (config.role === "host") publish("ready");
 }
 
@@ -191,10 +192,13 @@ async function poll() {
 function restart() {
   clearInterval(pollTimer);
   clearInterval(scanTimer);
-  restoreTheater();
   activeVideo = null;
   lastSequence = -1;
   hostSourceId = HOST_SOURCE_ID;
+  if (isSyncWatchRoomPage()) {
+    setStatus(`Room ${config.roomId || ""} detected automatically`.trim());
+    return;
+  }
   if (!config.enabled || !/^\d{6}$/.test(config.roomId)) {
     setStatus("Extension is off");
     return;
@@ -215,7 +219,23 @@ function restart() {
 
 chrome.storage.local.get(DEFAULT_CONFIG, (stored) => {
   config = { ...DEFAULT_CONFIG, ...stored };
-  restart();
+  detectRoomFromPage().then(restart);
+});
+
+window.addEventListener("message", async (event) => {
+  if (event.source !== window || event.origin !== location.origin || !isSyncWatchRoomPage()) return;
+  if (event.data?.type !== "syncwatch:mirror-source-audio") return;
+  const response = await chrome.runtime.sendMessage({
+    type: "syncwatch:set-stream-muted",
+    roomId: config.roomId,
+    muted: Boolean(event.data.muted)
+  });
+  window.postMessage({
+    type: "syncwatch:mirror-source-audio-result",
+    muted: Boolean(event.data.muted),
+    ok: Boolean(response?.ok),
+    error: response?.error || ""
+  }, location.origin);
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
