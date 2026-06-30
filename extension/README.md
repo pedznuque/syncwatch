@@ -10,4 +10,6 @@ This Manifest V3 extension synchronizes ordinary HTML5 video players. It never t
 4. Open the extension, enter the SyncWatch server URL and six-digit room code, choose **Host** on the controlling browser and **Viewer** everywhere else, then enable it.
 5. Open or refresh the same streaming page for each participant.
 
+The extension popup includes **Open synchronized stream window**. It reads the room's current stream link, opens it in a separate browser window, detects the primary HTML5 video, and lets SyncWatch control that player.
+
 The extension requests access to web pages because it must locate and control their HTML5 `<video>` element. DRM, cross-origin player internals, provider terms, and autoplay rules still apply.

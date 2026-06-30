@@ -20,6 +20,14 @@ if (!iceConfig.iceServers?.some((server) => {
   return urls.some((url) => String(url).startsWith("turn:") || String(url).startsWith("turns:"));
 })) throw new Error("TURN relay is missing from ICE configuration");
 
+const extensionResponse = await fetch(`${baseUrl}/downloads/syncwatch-web-player.zip`);
+const extensionBytes = new Uint8Array(await extensionResponse.arrayBuffer());
+if (!extensionResponse.ok
+  || !extensionResponse.headers.get("content-disposition")?.includes("syncwatch-web-player.zip")
+  || extensionBytes[0] !== 0x50 || extensionBytes[1] !== 0x4b) {
+  throw new Error("Extension download package is invalid");
+}
+
 const createdResponse = await fetch(`${baseUrl}/rooms`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -76,11 +84,14 @@ const webSyncResponse = await fetch(`${baseUrl}/rooms/${created.roomId}/web-sync
     currentTime: 42,
     paused: false,
     playbackRate: 1,
-    sourceId: "smoke-test"
+    sourceId: "extension-host:smoke-test",
+    eventType: "progress",
+    playerDetected: true
   })
 });
+const webSync = await webSyncResponse.json();
 if (webSyncResponse.headers.get("access-control-allow-origin") !== "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
-  || !webSyncResponse.ok || (await webSyncResponse.json()).currentTime !== 42) {
+  || !webSyncResponse.ok || webSync.currentTime !== 42 || !webSync.playerDetected) {
   throw new Error("Extension web-sync endpoint failed");
 }
 

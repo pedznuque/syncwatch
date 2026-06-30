@@ -3,6 +3,7 @@ import http from "http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import cors from "cors";
+import { ZipArchive } from "archiver";
 import { Server } from "socket.io";
 import { nanoid } from "nanoid";
 import { createHmac, randomInt } from "node:crypto";
@@ -12,6 +13,7 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
 const PORT = process.env.PORT || 5000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIST = path.resolve(__dirname, "../client/dist");
+const EXTENSION_DIR = path.resolve(__dirname, "../extension");
 
 const allowedOrigins = new Set(
   [CLIENT_ORIGIN, process.env.RENDER_EXTERNAL_URL, "https://syncwatch-tgzg.onrender.com", "http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"]
@@ -77,6 +79,8 @@ function createRoom(ownerName = "Host", requestedRoomId = "") {
       paused: true,
       playbackRate: 1,
       sourceId: "",
+      eventType: "idle",
+      playerDetected: false,
       updatedAt: 0
     },
     voiceUsers: new Set(),
@@ -155,6 +159,19 @@ app.get("/ice-config", (_req, res) => {
   res.json({ iceServers });
 });
 
+app.get("/downloads/syncwatch-web-player.zip", (_req, res) => {
+  res.attachment("syncwatch-web-player.zip");
+  res.set("Cache-Control", "no-store");
+  const archive = new ZipArchive({ zlib: { level: 9 } });
+  archive.on("error", (error) => {
+    if (!res.headersSent) res.status(500).json({ error: "Could not package the extension" });
+    else res.destroy(error);
+  });
+  archive.pipe(res);
+  archive.directory(EXTENSION_DIR, false);
+  archive.finalize();
+});
+
 app.post("/rooms", (req, res) => {
   const ownerName = req.body?.ownerName || "Host";
   const room = createRoom(ownerName);
@@ -208,6 +225,10 @@ app.post("/rooms/:roomId/web-sync", (req, res) => {
     paused: typeof req.body?.paused === "boolean" ? req.body.paused : room.webSync.paused,
     playbackRate: number(req.body?.playbackRate, room.webSync.playbackRate, 4) || 1,
     sourceId: String(req.body?.sourceId || "web").slice(0, 100),
+    eventType: String(req.body?.eventType || "sync").slice(0, 40),
+    playerDetected: typeof req.body?.playerDetected === "boolean"
+      ? req.body.playerDetected
+      : Boolean(room.webSync.playerDetected),
     updatedAt: Date.now()
   };
 
@@ -271,8 +292,14 @@ io.on("connection", (socket) => {
         ...room.webSync,
         seq: room.webSync.seq + 1,
         url: room.externalUrl,
-        title: "Supported web media ready",
-        sourceId: "app",
+        title: "Stream link set",
+        currentTime: 0,
+        duration: 0,
+        paused: true,
+        playbackRate: 1,
+        sourceId: "syncwatch-link",
+        eventType: "link-set",
+        playerDetected: false,
         updatedAt: Date.now()
       };
       io.to(roomId).emit("web:state", room.webSync);

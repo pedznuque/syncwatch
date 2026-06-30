@@ -3,7 +3,7 @@
   "name": "SyncWatch Web Player",
   "version": "1.0.0",
   "description": "Synchronize HTML5 video playback through a SyncWatch room.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "windows"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

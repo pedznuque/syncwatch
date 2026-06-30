@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, LockKeyhole } from "lucide-react";
-import { socket } from "../utils/socket.js";
+import { SERVER_URL, socket } from "../utils/socket.js";
 
 export default function DesktopWebPlayer({ roomId, url, canControl, initialTime = 0, initialPlaying = false }) {
   const webviewRef = useRef(null);
   const [videoFound, setVideoFound] = useState(false);
-  const [status, setStatus] = useState("Loading website…");
+  const [status, setStatus] = useState("Loading website...");
   const guestPreloadUrl = window.syncwatchDesktop?.guestPreloadUrl;
 
   useEffect(() => {
@@ -15,6 +15,16 @@ export default function DesktopWebPlayer({ roomId, url, canControl, initialTime 
     const send = (command) => {
       try { webview.send("syncwatch:command", command); } catch {}
     };
+    const publishWebState = (state) => fetch(`${SERVER_URL.replace(/\/+$/, "")}/rooms/${roomId}/web-sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...state,
+        sourceId: "desktop-host",
+        eventType: state.eventType || "progress",
+        playerDetected: true
+      })
+    }).catch(() => {});
     const onReady = () => {
       setStatus("Website loaded. Sign in with your own account if required.");
       send({ type: "sync", currentTime: Number(initialTime || 0), isPlaying: Boolean(initialPlaying) });
@@ -30,12 +40,13 @@ export default function DesktopWebPlayer({ roomId, url, canControl, initialTime 
     const onIpc = (event) => {
       if (event.channel === "syncwatch:video-found") {
         setVideoFound(true);
-        setStatus(canControl ? "Video detected · You can control playback" : "Video detected · Controlled by host or moderator");
+        setStatus(canControl ? "Video detected - You can control playback" : "Video detected - Controlled by host or moderator");
         return;
       }
       if (event.channel !== "syncwatch:video-state" || !canControl) return;
       const state = event.args?.[0];
       if (!state) return;
+      publishWebState(state);
       if (state.eventType === "play") socket.emit("player:play", { roomId, currentTime: state.currentTime });
       if (state.eventType === "pause") socket.emit("player:pause", { roomId, currentTime: state.currentTime });
       if (state.eventType === "seek") socket.emit("player:seek", { roomId, currentTime: state.currentTime });
