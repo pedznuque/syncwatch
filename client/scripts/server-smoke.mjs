@@ -120,13 +120,35 @@ const appCommandResponse = await fetch(`${baseUrl}/rooms/${created.roomId}/web-s
     currentTime: 43,
     paused: true,
     sourceId: "syncwatch-app",
+    commandId: "smoke-command-1",
     eventType: "pause"
   })
 });
 const appCommandState = await appCommandResponse.json();
 if (!appCommandResponse.ok || !appCommandState.paused || appCommandState.currentTime !== 43
+  || appCommandState.commandId !== "smoke-command-1" || appCommandState.ackCommandId
   || appCommandState.playerSourceId !== "extension-host:smoke-test") {
   throw new Error("SyncWatch player command did not preserve the active extension controller");
+}
+
+const acknowledgementResponse = await fetch(`${baseUrl}/rooms/${created.roomId}/web-sync`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json", Origin: "chrome-extension://abcdefghijklmnopabcdefghijklmnop" },
+  body: JSON.stringify({
+    url: "https://www.bilibili.tv/",
+    currentTime: 43,
+    paused: true,
+    sourceId: "extension-host:smoke-test",
+    eventType: "command-ack",
+    playerDetected: true,
+    ackCommandId: "smoke-command-1",
+    commandError: ""
+  })
+});
+const acknowledgedState = await acknowledgementResponse.json();
+if (!acknowledgementResponse.ok || acknowledgedState.ackCommandId !== "smoke-command-1"
+  || acknowledgedState.commandId !== "smoke-command-1" || acknowledgedState.commandError) {
+  throw new Error("Extension command acknowledgement failed");
 }
 
 const hostVoicePeers = waitFor(host, "voice:peers");

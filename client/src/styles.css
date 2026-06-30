@@ -515,6 +515,7 @@ button.danger, .danger { background: rgba(239, 68, 68, 0.22); color: #fecaca; }
   background: rgba(2, 6, 23, .58);
 }
 .web-remote-controls button { width: 40px; height: 40px; padding: 0; border-radius: 50%; }
+.web-remote-controls button:disabled, .web-remote-controls input:disabled { opacity: .48; cursor: wait; }
 .web-remote-controls span { min-width: 88px; color: #cbd5e1; font-size: 12px; text-align: center; }
 .web-remote-controls input { min-width: 90px; accent-color: #818cf8; }
 .web-remote-controls small { grid-column: 1 / -1; color: #a5b4fc; }

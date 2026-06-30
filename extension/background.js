@@ -14,6 +14,20 @@ async function setController(nextController) {
   else await chrome.storage.session.remove("syncwatchController");
 }
 
+async function returnFocusToSyncWatch(config, activeController) {
+  if (!activeController?.returnFocus) return;
+  let origin;
+  try { origin = new URL(config.serverUrl || DEFAULT_SERVER).origin; } catch { return; }
+  const tabs = await chrome.tabs.query({});
+  const syncWatchTab = tabs.find((tab) => {
+    try { return tab.id !== activeController.tabId && new URL(tab.url).origin === origin; } catch { return false; }
+  });
+  await setController({ ...activeController, returnFocus: false });
+  if (!Number.isInteger(syncWatchTab?.id)) return;
+  await chrome.tabs.update(syncWatchTab.id, { active: true });
+  await chrome.windows.update(syncWatchTab.windowId, { focused: true });
+}
+
 function endpoint(config) {
   const serverUrl = String(config.serverUrl || DEFAULT_SERVER).replace(/\/+$/, "");
   const parsed = new URL(serverUrl);
@@ -52,6 +66,12 @@ async function roomRequest(message, sender) {
   const response = await fetch(url, options);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `SyncWatch returned ${response.status}.`);
+  if (message.method === "POST" && config.role === "host" && /^extension-host:/.test(body.sourceId || "") && !data.ignored) {
+    const activeController = await getController();
+    if (activeController?.tabId === sender.tab?.id && activeController?.frameId === Number(sender.frameId || 0)) {
+      await returnFocusToSyncWatch(config, activeController);
+    }
+  }
   return { ok: true, data, ignored: Boolean(data.ignored) };
 }
 
@@ -65,7 +85,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message?.type === "syncwatch:set-controller-tab") {
         const tabId = Number(message.tabId);
         if (!Number.isInteger(tabId)) throw new Error("Choose a valid stream tab.");
-        await setController({ tabId, frameId: null });
+        await setController({ tabId, frameId: null, returnFocus: false });
         sendResponse({ ok: true });
         return;
       }
@@ -84,7 +104,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const [activeTab] = await chrome.tabs.query({ windowId: created.id, active: true });
           tabId = activeTab?.id;
         }
-        if (Number.isInteger(tabId) && message.config?.role === "host") await setController({ tabId, frameId: null });
+        if (Number.isInteger(tabId) && message.config?.role === "host") await setController({ tabId, frameId: null, returnFocus: true });
         sendResponse({ ok: true, url: roomState.data.url });
         return;
       }

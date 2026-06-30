@@ -83,6 +83,10 @@ function createRoom(ownerName = "Host", requestedRoomId = "") {
       playerDetected: false,
       playerSourceId: "",
       playerUpdatedAt: 0,
+      commandId: "",
+      commandIssuedAt: 0,
+      ackCommandId: "",
+      commandError: "",
       updatedAt: 0
     },
     voiceUsers: new Set(),
@@ -220,6 +224,9 @@ app.post("/rooms/:roomId/web-sync", (req, res) => {
   const now = Date.now();
   const sourceId = String(req.body?.sourceId || "web").slice(0, 100);
   const isPlayerUpdate = /^(extension-host|desktop-host)/.test(sourceId);
+  const isAppCommand = sourceId === "syncwatch-app";
+  const incomingCommandId = String(req.body?.commandId || "").slice(0, 100);
+  const incomingAckCommandId = String(req.body?.ackCommandId || "").slice(0, 100);
   const hasOtherActivePlayer = isPlayerUpdate
     && room.webSync.playerSourceId
     && room.webSync.playerSourceId !== sourceId
@@ -241,6 +248,12 @@ app.post("/rooms/:roomId/web-sync", (req, res) => {
       : Boolean(room.webSync.playerDetected),
     playerSourceId: isPlayerUpdate ? sourceId : room.webSync.playerSourceId,
     playerUpdatedAt: isPlayerUpdate ? now : room.webSync.playerUpdatedAt,
+    commandId: isAppCommand && incomingCommandId ? incomingCommandId : room.webSync.commandId,
+    commandIssuedAt: isAppCommand && incomingCommandId ? now : room.webSync.commandIssuedAt,
+    ackCommandId: isPlayerUpdate && incomingAckCommandId ? incomingAckCommandId : room.webSync.ackCommandId,
+    commandError: isPlayerUpdate && incomingAckCommandId
+      ? String(req.body?.commandError || "").slice(0, 240)
+      : room.webSync.commandError,
     updatedAt: now
   };
 
