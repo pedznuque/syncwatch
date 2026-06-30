@@ -75,21 +75,29 @@ if (!reused.ok || !reused.reused || calls.updated.at(-1)?.changes.url !== "https
   throw new Error("Automatic stream window did not follow a changed link");
 }
 
+tabs.set(700, { id: 700, windowId: 88, url: "https://syncwatch-tgzg.onrender.com/room/123456" });
 const registered = await send(
-  { type: "syncwatch:register-stream-tab", roomId: "123456", role: "host" },
+  { type: "syncwatch:register-stream-tab", roomId: "123456", role: "host", mediaUrl: "https://media.example/video.mp4" },
   { tab: { id: 501, windowId: 77, url: "https://example.com/second" }, frameId: 0 }
 );
-if (!registered.ok || session.syncwatchController?.tabId !== 501) {
+const localMediaMessage = calls.sent.find(({ message }) => message.type === "syncwatch:local-media-detected");
+if (!registered.ok || session.syncwatchController?.tabId !== 501
+  || localMediaMessage?.message.mediaUrl !== "https://media.example/video.mp4") {
   throw new Error("Host video tab did not become the automatic controller");
 }
 
-tabs.set(700, { id: 700, windowId: 88, url: "https://syncwatch-tgzg.onrender.com/room/123456" });
 const captureContext = await send({ type: "syncwatch:capture-context", tabId: 501 });
 const captured = await send({ type: "syncwatch:start-capture", tabId: 501 });
+const captureMessage = calls.sent.find(({ message }) => message.type === "syncwatch:consume-tab-capture");
 if (!captureContext.isStreamTab || !captured.ok
   || calls.captured[0]?.targetTabId !== 501 || calls.captured[0]?.consumerTabId !== 700
-  || calls.sent[0]?.message.streamId !== "smoke-stream-id") {
+  || captureMessage?.message.streamId !== "smoke-stream-id") {
   throw new Error("Local stream-tab capture was not bridged into the SyncWatch room tab");
+}
+
+const muted = await send({ type: "syncwatch:set-stream-muted", roomId: "123456", muted: true });
+if (!muted.ok || calls.updated.at(-1)?.changes.muted !== true) {
+  throw new Error("Source stream tab was not muted for local direct playback");
 }
 
 const closed = await send({ type: "syncwatch:auto-stream", config, url: "" });

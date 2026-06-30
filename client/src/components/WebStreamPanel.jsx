@@ -13,11 +13,15 @@ function formatTime(value) {
 
 export default function WebStreamPanel({ roomId, webUrl, webState, isHost, username, voice }) {
   const captureVideoRef = useRef(null);
+  const directVideoRef = useRef(null);
   const captureContainerRef = useRef(null);
   const captureStreamRef = useRef(null);
   const [captureActive, setCaptureActive] = useState(false);
   const [captureStatus, setCaptureStatus] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [localMediaUrl, setLocalMediaUrl] = useState("");
+  const [directReady, setDirectReady] = useState(false);
+  const [directFailed, setDirectFailed] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [seeking, setSeeking] = useState(false);
   const [seekDraft, setSeekDraft] = useState(Number(webState?.currentTime || 0));
@@ -78,6 +82,37 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, usern
   useEffect(() => {
     if (!seeking) setSeekDraft(liveTime);
   }, [liveTime, seeking]);
+
+  useEffect(() => {
+    const onLocalMedia = (event) => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      if (event.data?.type !== "syncwatch:local-media-detected" || event.data.roomId !== roomId) return;
+      setLocalMediaUrl(String(event.data.mediaUrl || ""));
+      setDirectReady(false);
+      setDirectFailed(false);
+      setCaptureStatus("Detected a direct media source - connecting it locally...");
+    };
+    window.addEventListener("message", onLocalMedia);
+    return () => window.removeEventListener("message", onLocalMedia);
+  }, [roomId]);
+
+  useEffect(() => () => {
+    window.postMessage({ type: "syncwatch:local-media-playback", playing: false }, window.location.origin);
+  }, [localMediaUrl]);
+
+  useEffect(() => {
+    const player = directVideoRef.current;
+    if (!player || !directReady || captureActive) {
+      if (captureActive) player?.pause();
+      return;
+    }
+    if (Math.abs(Number(player.currentTime || 0) - liveTime) > 1.25) {
+      try { player.currentTime = liveTime; } catch {}
+    }
+    player.playbackRate = Number(confirmedState.playbackRate || 1);
+    if (isPlaying) player.play().catch(() => {});
+    else player.pause();
+  }, [captureActive, confirmedState.playbackRate, directReady, isPlaying, liveTime]);
 
   useEffect(() => {
     const stopCapture = () => {
@@ -202,13 +237,40 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, usern
         The extension automatically opens or updates one stream window. In that window, click the SyncWatch extension once and choose <strong>Show this video in SyncWatch</strong>.
       </p>
 
-      <div ref={captureContainerRef} className={isFullscreen ? "web-capture-frame fullscreen" : "web-capture-frame"} hidden={!captureActive}>
-        <video ref={captureVideoRef} autoPlay playsInline onClick={() => captureVideoRef.current?.play().catch(() => {})} />
+      <div ref={captureContainerRef} className={isFullscreen ? "web-capture-frame fullscreen" : "web-capture-frame"} hidden={!captureActive && (!localMediaUrl || directFailed)}>
+        <video
+          ref={directVideoRef}
+          src={localMediaUrl || undefined}
+          autoPlay
+          playsInline
+          preload="auto"
+          referrerPolicy="no-referrer"
+          hidden={captureActive || !localMediaUrl || directFailed}
+          onCanPlay={() => {
+            setDirectReady(true);
+            setDirectFailed(false);
+            window.postMessage({ type: "syncwatch:local-media-playback", playing: true }, window.location.origin);
+            setCaptureStatus("Detected media is playing directly in SyncWatch");
+          }}
+          onError={() => {
+            setDirectReady(false);
+            setDirectFailed(true);
+            window.postMessage({ type: "syncwatch:local-media-playback", playing: false }, window.location.origin);
+            setCaptureStatus("This website blocks direct playback. Use Show this video in SyncWatch from the extension on the stream tab.");
+          }}
+        />
+        <video ref={captureVideoRef} autoPlay playsInline hidden={!captureActive} onClick={() => captureVideoRef.current?.play().catch(() => {})} />
         <button className="web-capture-fullscreen" onClick={toggleFullscreen} title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
           <Maximize2 size={18} />
         </button>
         {isFullscreen && <FullscreenChatOverlay roomId={roomId} username={username} voice={voice} />}
       </div>
+      {!captureActive && (!localMediaUrl || directFailed) && hasLink && (
+        <div className="web-capture-placeholder">
+          <strong>{directFailed ? "Direct embedding was blocked" : "Player detected, waiting for renderable media"}</strong>
+          <span>On the stream tab, click the SyncWatch extension and choose <b>Show this video in SyncWatch</b>.</span>
+        </div>
+      )}
       {captureStatus && <p className="web-capture-status">{captureStatus}</p>}
 
       {hasLink && isHost && (

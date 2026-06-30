@@ -34,6 +34,16 @@ async function getExistingStreamTab(roomId) {
   catch { return null; }
 }
 
+async function findRoomTab(roomId) {
+  const storedConfig = await chrome.storage.local.get({ serverUrl: DEFAULT_SERVER });
+  const serverOrigin = new URL(storedConfig.serverUrl || DEFAULT_SERVER).origin;
+  const roomTabs = await chrome.tabs.query({});
+  return roomTabs.find((tab) => {
+    try { return new URL(tab.url).origin === serverOrigin && new URL(tab.url).pathname === `/room/${roomId}`; }
+    catch { return false; }
+  }) || null;
+}
+
 async function returnFocusToSyncWatch(config, activeController) {
   if (!activeController?.returnFocus) return;
   let origin;
@@ -119,7 +129,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             await setController({ tabId, frameId: null, returnFocus: Boolean(existing?.managed) });
           }
         }
+        if (message.mediaUrl) {
+          const consumerTab = await findRoomTab(roomId);
+          if (Number.isInteger(consumerTab?.id)) {
+            await chrome.tabs.sendMessage(consumerTab.id, {
+              type: "syncwatch:local-media-detected",
+              roomId,
+              mediaUrl: String(message.mediaUrl).slice(0, 4096),
+              sourceTabId: tabId
+            }).catch(() => {});
+          }
+        }
         sendResponse({ ok: true });
+        return;
+      }
+      if (message?.type === "syncwatch:set-stream-muted") {
+        const roomId = String(message.roomId || "");
+        const existing = await getExistingStreamTab(roomId);
+        if (!existing?.tab) throw new Error("The room stream tab is unavailable.");
+        await chrome.tabs.update(existing.tab.id, { muted: Boolean(message.muted) });
+        sendResponse({ ok: true, muted: Boolean(message.muted) });
         return;
       }
       if (message?.type === "syncwatch:capture-context") {
@@ -143,13 +172,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         if (!entry) throw new Error("This is not the stream tab for an active SyncWatch room.");
         const roomId = entry[0];
-        const storedConfig = await chrome.storage.local.get({ serverUrl: DEFAULT_SERVER });
-        const serverOrigin = new URL(storedConfig.serverUrl || DEFAULT_SERVER).origin;
-        const roomTabs = await chrome.tabs.query({});
-        const consumerTab = roomTabs.find((tab) => {
-          try { return new URL(tab.url).origin === serverOrigin && new URL(tab.url).pathname === `/room/${roomId}`; }
-          catch { return false; }
-        });
+        const consumerTab = await findRoomTab(roomId);
         if (!Number.isInteger(consumerTab?.id)) throw new Error("Keep the matching SyncWatch room open, then try again.");
         const streamId = await chrome.tabCapture.getMediaStreamId({
           targetTabId,
