@@ -25,7 +25,7 @@ The extension controls the primary HTML5 `<video>` element on a streaming page.
 6. Enable the extension, then open or refresh the same streaming page in each browser.
 
 The GitHub Actions extension workflow also publishes a ready-to-unzip package as a build artifact.
-The running SyncWatch app provides a **Download extension** button, plus **Open stream window** and **Mirror stream window** controls after a web link is set. The extension popup can also open the room's current stream in a dedicated synchronized window and mark one tab as the controller.
+The running SyncWatch app provides a **Download extension** button, plus **Open stream window** and **Mirror stream window** controls after a web link is set. The extension popup can also open the room's current stream in a dedicated synchronized window, fill that window with the detected video, and mark one tab as the controller. Remote controls wait for acknowledgement from the real player before changing their displayed state.
 
 SyncWatch shows whether no link is set, a link is waiting for the extension, or an HTML5 video was detected. Mirroring uses the browser's window/tab chooser instead of iframe embedding. It stays local to that viewer and can enter fullscreen with floating chat and shared microphone controls. DRM-protected video may still appear black when captured.
 

@@ -2,7 +2,8 @@ const DEFAULT_CONFIG = {
   enabled: false,
   serverUrl: "https://syncwatch-tgzg.onrender.com",
   roomId: "",
-  role: "viewer"
+  role: "viewer",
+  autoTheater: true
 };
 const HOST_SOURCE_ID = `extension-host:${chrome.runtime.id}`;
 let hostSourceId = HOST_SOURCE_ID;
@@ -15,6 +16,8 @@ let lastPublished = 0;
 let pollTimer = null;
 let scanTimer = null;
 const boundVideos = new WeakSet();
+let theaterVideo = null;
+let theaterStyle = null;
 
 function request(method, body) {
   return chrome.runtime.sendMessage({ type: "syncwatch:request", method, config, body });
@@ -34,8 +37,42 @@ function collectVideos(root, output = []) {
 
 function findPrimaryVideo() {
   return collectVideos(document)
-    .filter((video) => video.isConnected)
-    .sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0] || null;
+    .filter((video) => {
+      const rect = video.getBoundingClientRect();
+      const style = getComputedStyle(video);
+      return video.isConnected && rect.width >= 120 && rect.height >= 68
+        && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0;
+    })
+    .sort((a, b) => scoreVideo(b) - scoreVideo(a))[0] || null;
+}
+
+function scoreVideo(video) {
+  const rect = video.getBoundingClientRect();
+  const area = rect.width * rect.height;
+  return area
+    + (video.readyState >= 2 ? 250_000 : 0)
+    + (!video.paused ? 500_000 : 0)
+    + (Number.isFinite(video.duration) && video.duration > 30 ? 150_000 : 0);
+}
+
+function restoreTheater() {
+  if (!theaterVideo) return;
+  if (theaterStyle === null) theaterVideo.removeAttribute("style");
+  else theaterVideo.setAttribute("style", theaterStyle);
+  theaterVideo = null;
+  theaterStyle = null;
+}
+
+function applyTheater(video) {
+  if (!config.autoTheater || config.role !== "host" || theaterVideo === video) return;
+  restoreTheater();
+  theaterVideo = video;
+  theaterStyle = video.getAttribute("style");
+  Object.assign(video.style, {
+    position: "fixed", inset: "0", width: "100vw", height: "100vh",
+    maxWidth: "none", maxHeight: "none", objectFit: "contain",
+    background: "black", zIndex: "2147483646"
+  });
 }
 
 async function publish(eventType) {
@@ -57,7 +94,25 @@ async function publish(eventType) {
     return;
   }
   if (response?.data?.sourceId) hostSourceId = response.data.sourceId;
+  if (response?.ok) applyTheater(activeVideo);
   setStatus(response?.ok ? `Host connected - ${eventType}` : response?.error || "Cannot reach SyncWatch");
+}
+
+async function acknowledgeCommand(commandId, error = "") {
+  if (!activeVideo || !commandId) return;
+  await request("POST", {
+    eventType: "command-ack",
+    url: location.href,
+    title: document.title || "Web video",
+    currentTime: Number(activeVideo.currentTime || 0),
+    duration: Number.isFinite(activeVideo.duration) ? activeVideo.duration : 0,
+    paused: activeVideo.paused,
+    playbackRate: Number(activeVideo.playbackRate || 1),
+    sourceId: HOST_SOURCE_ID,
+    playerDetected: true,
+    ackCommandId: commandId,
+    commandError: error
+  });
 }
 
 function bindVideo(video) {
@@ -111,9 +166,19 @@ async function applyRemoteState(state) {
   if (Number.isFinite(Number(state.playbackRate)) && activeVideo.playbackRate !== Number(state.playbackRate)) {
     activeVideo.playbackRate = Number(state.playbackRate);
   }
+  let commandError = "";
   if (state.paused) activeVideo.pause();
-  else if (activeVideo.paused) activeVideo.play().catch(showPlaybackPrompt);
-  setStatus(`Viewer connected - ${state.paused ? "paused" : "playing"}`);
+  else if (activeVideo.paused) {
+    try { await activeVideo.play(); }
+    catch {
+      commandError = "Playback was blocked. Click Enable synchronized playback in the stream window.";
+      showPlaybackPrompt();
+    }
+  }
+  if (config.role === "host" && state.sourceId === "syncwatch-app" && state.commandId) {
+    await acknowledgeCommand(state.commandId, commandError);
+  }
+  setStatus(`${config.role === "host" ? "Controller" : "Viewer"} connected - ${activeVideo.paused ? "paused" : "playing"}`);
 }
 
 async function poll() {
@@ -126,6 +191,7 @@ async function poll() {
 function restart() {
   clearInterval(pollTimer);
   clearInterval(scanTimer);
+  restoreTheater();
   activeVideo = null;
   lastSequence = -1;
   hostSourceId = HOST_SOURCE_ID;

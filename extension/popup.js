@@ -3,15 +3,17 @@ const defaults = {
   serverUrl: "https://syncwatch-tgzg.onrender.com",
   roomId: "",
   role: "viewer",
+  autoTheater: true,
   syncwatchLastStatus: "Extension is off"
 };
-const fields = Object.fromEntries(["serverUrl", "roomId", "role", "enabled", "status", "save", "openStream", "useThisTab"].map((id) => [id, document.getElementById(id)]));
+const fields = Object.fromEntries(["serverUrl", "roomId", "role", "enabled", "autoTheater", "status", "save", "openStream", "useThisTab"].map((id) => [id, document.getElementById(id)]));
 
 chrome.storage.local.get(defaults, (config) => {
   fields.serverUrl.value = config.serverUrl;
   fields.roomId.value = config.roomId;
   fields.role.value = config.role;
   fields.enabled.checked = config.enabled;
+  fields.autoTheater.checked = config.autoTheater;
   fields.status.textContent = config.syncwatchLastStatus;
 });
 
@@ -29,7 +31,7 @@ fields.save.addEventListener("click", () => {
     fields.status.textContent = "Enter a valid SyncWatch server URL.";
     return;
   }
-  chrome.storage.local.set({ enabled: fields.enabled.checked, serverUrl, roomId, role: fields.role.value }, () => {
+  chrome.storage.local.set({ enabled: fields.enabled.checked, autoTheater: fields.autoTheater.checked, serverUrl, roomId, role: fields.role.value }, () => {
     fields.status.textContent = fields.enabled.checked ? "Saved - open or refresh the video page" : "Extension is off";
   });
 });
