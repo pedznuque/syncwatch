@@ -9,17 +9,11 @@
   <body>
     <main>
       <h1>SyncWatch</h1>
-      <p>Open a SyncWatch room first. The extension detects its room code automatically.</p>
-      <label>Room code<input id="roomId" inputmode="numeric" maxlength="6" placeholder="Detected from SyncWatch" /></label>
-      <label>Playback role<select id="role"><option value="viewer">Viewer</option><option value="host">Host / controller</option></select></label>
-      <label class="toggle"><input id="enabled" type="checkbox" /> Sync videos in this browser</label>
-      <label class="toggle"><input id="autoFullscreen" type="checkbox" /> Fullscreen the detected stream window</label>
-      <details><summary>Advanced connection</summary><label>Server URL<input id="serverUrl" type="url" /></label></details>
-      <button id="save">Save settings</button>
-      <button id="openStream" class="secondary">Open room stream</button>
-      <button id="useThisTab" class="secondary">Control this video tab</button>
-      <div id="status">Extension is off</div>
-      <small>Use Host only on the browser that controls playback. Everyone else should use Viewer.</small>
+      <p>The extension stays active and configures itself from the SyncWatch room you open.</p>
+      <div class="connection"><span>Room</span><strong id="room">Waiting for SyncWatch</strong></div>
+      <div class="connection"><span>Role</span><strong id="role">Automatic</strong></div>
+      <div id="status">Open a SyncWatch room to begin.</div>
+      <small>Stream windows open and change automatically. The host's detected video becomes the controller; viewers follow it.</small>
     </main>
     <script src="popup.js"></script>
   </body>

@@ -20,14 +20,12 @@ The extension controls the primary HTML5 `<video>` element on a streaming page.
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked** and select the [`extension`](extension) folder.
-4. Enter the SyncWatch server URL and room code.
-5. Select **Host / controller** for the person controlling playback and **Viewer** for everyone else.
-6. Enable the extension, then open or refresh the same streaming page in each browser.
+4. Open or refresh a SyncWatch room. The app automatically supplies the room code, role, and current stream link to the extension.
 
 The GitHub Actions extension workflow also publishes a ready-to-unzip package as a build artifact.
-The running SyncWatch app provides a **Download extension** button, plus **Open stream window** and **Mirror stream window** controls after a web link is set. The extension detects the room code from an open SyncWatch room, can fullscreen the actual stream window, and keeps that source tab silent while its high-resolution local mirror plays the captured audio. Remote controls wait for acknowledgement from the real player before changing their displayed state.
+The running SyncWatch app provides a **Download extension** button. When the host sets or changes a web link, each participant's extension automatically opens or reuses one local stream window. The host's detected HTML5 video becomes the controller automatically, while everyone else follows as a viewer. Remote controls wait for acknowledgement from the real player before changing their displayed state.
 
-SyncWatch shows whether no link is set, a link is waiting for the extension, or an HTML5 video was detected. Mirroring uses the browser's window/tab chooser instead of iframe embedding. It stays local to that viewer and can enter fullscreen with floating chat and shared microphone controls. DRM-protected video may still appear black when captured.
+SyncWatch shows whether no link is set, a stream window is opening, or an HTML5 video was detected. Website video remains in its original provider window because browsers and protected sites do not permit silent cross-origin embedding or capture.
 
 ## Reliable voice across different networks
 

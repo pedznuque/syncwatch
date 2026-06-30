@@ -93,6 +93,7 @@ export default function Room() {
             state={roomState}
             username={username}
             isHost={canControl}
+            extensionRole={isHost ? "host" : "viewer"}
             voice={voice}
           />
           <div className="below-player-grid streamlined-bottom">

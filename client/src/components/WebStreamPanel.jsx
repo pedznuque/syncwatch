@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, ExternalLink, FastForward, Maximize2, MonitorUp, Pause, Play, Rewind, Square } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Download, FastForward, Pause, Play, Rewind } from "lucide-react";
 import { SERVER_URL } from "../utils/socket.js";
-import FullscreenChatOverlay from "./FullscreenChatOverlay.jsx";
 
 function formatTime(value) {
   const seconds = Math.max(0, Math.floor(Number(value) || 0));
@@ -11,13 +10,7 @@ function formatTime(value) {
   return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${tail}` : `${minutes}:${tail}`;
 }
 
-export default function WebStreamPanel({ roomId, webUrl, webState, isHost, username, voice }) {
-  const mirrorVideoRef = useRef(null);
-  const mirrorContainerRef = useRef(null);
-  const mirrorStreamRef = useRef(null);
-  const [mirrorActive, setMirrorActive] = useState(false);
-  const [mirrorStatus, setMirrorStatus] = useState("");
-  const [isFullscreen, setIsFullscreen] = useState(false);
+export default function WebStreamPanel({ roomId, webUrl, webState, isHost }) {
   const [now, setNow] = useState(Date.now());
   const [seeking, setSeeking] = useState(false);
   const [seekDraft, setSeekDraft] = useState(Number(webState?.currentTime || 0));
@@ -79,91 +72,6 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, usern
     if (!seeking) setSeekDraft(liveTime);
   }, [liveTime, seeking]);
 
-  const setSourceAudioMuted = (muted) => {
-    window.postMessage({ type: "syncwatch:mirror-source-audio", muted }, window.location.origin);
-  };
-
-  const stopMirror = () => {
-    const stream = mirrorStreamRef.current;
-    mirrorStreamRef.current = null;
-    stream?.getTracks().forEach((track) => {
-      track.onended = null;
-      track.stop();
-    });
-    if (mirrorVideoRef.current) mirrorVideoRef.current.srcObject = null;
-    if (stream) setSourceAudioMuted(false);
-    setMirrorActive(false);
-    setMirrorStatus("Mirror stopped");
-  };
-
-  useEffect(() => () => {
-    mirrorStreamRef.current?.getTracks().forEach((track) => track.stop());
-    window.postMessage({ type: "syncwatch:mirror-source-audio", muted: false }, window.location.origin);
-  }, []);
-
-  useEffect(() => {
-    const onMirrorAudioResult = (event) => {
-      if (event.source !== window || event.origin !== window.location.origin) return;
-      if (event.data?.type !== "syncwatch:mirror-source-audio-result" || !event.data.muted || event.data.ok) return;
-      setMirrorStatus(`Mirror has sound, but the source window could not be silenced: ${event.data.error}`);
-    };
-    window.addEventListener("message", onMirrorAudioResult);
-    return () => window.removeEventListener("message", onMirrorAudioResult);
-  }, []);
-
-  useEffect(() => {
-    const onFullscreenChange = () => setIsFullscreen(document.fullscreenElement === mirrorContainerRef.current);
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, []);
-
-  const startMirror = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          width: { ideal: 3840 },
-          height: { ideal: 2160 },
-          frameRate: { ideal: 60, max: 60 }
-        },
-        audio: {
-          channelCount: { ideal: 2 },
-          sampleRate: { ideal: 48000 },
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        },
-        selfBrowserSurface: "exclude",
-        surfaceSwitching: "exclude"
-      });
-      stopMirror();
-      mirrorStreamRef.current = stream;
-      const [videoTrack] = stream.getVideoTracks();
-      const [audioTrack] = stream.getAudioTracks();
-      if (videoTrack) videoTrack.contentHint = "detail";
-      if (audioTrack) audioTrack.contentHint = "music";
-      if (mirrorVideoRef.current) {
-        mirrorVideoRef.current.srcObject = stream;
-        mirrorVideoRef.current.muted = false;
-        mirrorVideoRef.current.volume = 1;
-        await mirrorVideoRef.current.play().catch(() => {});
-      }
-      stream.getTracks().forEach((track) => { track.onended = stopMirror; });
-      setSourceAudioMuted(true);
-      setMirrorActive(true);
-      const settings = videoTrack?.getSettings?.() || {};
-      const resolution = settings.width && settings.height ? `${settings.width}x${settings.height}` : "source resolution";
-      setMirrorStatus(`High-quality mirror active (${resolution}${audioTrack ? ", audio on" : ", no shared audio"})`);
-    } catch (error) {
-      if (error?.name !== "NotAllowedError") setMirrorStatus("Window mirroring is unavailable in this browser");
-    }
-  };
-
-  const toggleFullscreen = async () => {
-    if (!mirrorContainerRef.current) return;
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else await mirrorContainerRef.current.requestFullscreen();
-  };
-
   const sendCommand = async (eventType, overrides = {}) => {
     if (!isHost || !hasLink) return;
     const commandId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -193,20 +101,11 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, usern
     }
   };
 
-  const openStream = () => {
-    if (!hasLink) return;
-    const popup = window.open(webUrl, `syncwatch-stream-${roomId}`, "popup=yes,width=1280,height=800,resizable=yes,scrollbars=yes");
-    if (popup) {
-      try { popup.opener = null; } catch {}
-      popup.focus();
-    } else alert("Allow pop-ups for SyncWatch to open the stream window.");
-  };
-
   const status = !hasLink
     ? { tone: "idle", label: "No stream link set", detail: "Paste a streaming page URL above." }
     : detected
       ? { tone: "online", label: "Video detected", detail: `${webState?.title || "HTML5 video"} - ${isPlaying ? "playing" : "paused"}` }
-      : { tone: "waiting", label: "Link set - waiting for video", detail: "Open the stream and select its tab as the extension controller." };
+      : { tone: "waiting", label: "Opening stream automatically", detail: "The extension is opening this link and looking for its video player." };
 
   return (
     <div className="web-stream-workspace">
@@ -219,16 +118,10 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, usern
         <a className="button-link" href={`${serverOrigin}/downloads/syncwatch-web-player.zip`} download>
           <Download size={17} /> Download extension
         </a>
-        <button disabled={!hasLink} onClick={openStream}><ExternalLink size={17} /> Open stream window</button>
-        {!mirrorActive ? (
-          <button disabled={!hasLink} onClick={startMirror}><MonitorUp size={17} /> Mirror stream window</button>
-        ) : (
-          <button onClick={stopMirror}><Square size={17} /> Stop mirror</button>
-        )}
       </div>
 
       <p className="web-stream-help">
-        Select the stream tab and enable <strong>Share tab audio</strong>. SyncWatch keeps the captured picture at the highest resolution available and silences the separate source tab to avoid duplicate sound.
+        The extension automatically opens or updates one stream window for this room. The host browser controls its detected video; everyone else follows as a viewer.
       </p>
 
       {hasLink && isHost && (
@@ -258,15 +151,6 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, usern
           {commandStatus && <small>{commandStatus}</small>}
         </div>
       )}
-
-      <div ref={mirrorContainerRef} className={isFullscreen ? "web-mirror-frame fullscreen" : "web-mirror-frame"} hidden={!mirrorActive}>
-        <video ref={mirrorVideoRef} autoPlay playsInline />
-        <button className="web-mirror-fullscreen" onClick={toggleFullscreen} title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
-          <Maximize2 size={18} />
-        </button>
-        {isFullscreen && <FullscreenChatOverlay roomId={roomId} username={username} voice={voice} />}
-      </div>
-      {mirrorStatus && <p className="web-mirror-status">{mirrorStatus}</p>}
     </div>
   );
 }

@@ -39,7 +39,7 @@ function parseTime(value) {
   return null;
 }
 
-export default function MediaPanel({ roomId, state, username, isHost, voice }) {
+export default function MediaPanel({ roomId, state, username, isHost, extensionRole, voice }) {
   const videoRef = useRef(null);
   const youtubeRef = useRef(null);
   const ytPlayerRef = useRef(null);
@@ -66,6 +66,15 @@ export default function MediaPanel({ roomId, state, username, isHost, voice }) {
   
   const VALID_MODES = ["direct-video", "youtube", "web"];
   const activeMode = VALID_MODES.includes(mode) ? mode : "direct-video";
+
+  useEffect(() => {
+    window.postMessage({
+      type: "syncwatch:room-context",
+      roomId,
+      role: extensionRole === "host" ? "host" : "viewer",
+      url: activeMode === "web" ? webUrl : ""
+    }, window.location.origin);
+  }, [activeMode, extensionRole, roomId, webUrl]);
 
   useEffect(() => {
     if (!state) return;
@@ -427,9 +436,6 @@ export default function MediaPanel({ roomId, state, username, isHost, voice }) {
           webUrl={webUrl}
           webState={webState}
           isHost={isHost}
-          isDesktop={isDesktop}
-          username={username}
-          voice={voice}
         />
       ) : <div ref={playerContainerRef} className={isFullscreen ? "media-stage fullscreen" : "media-stage"}>
         {hasMedia && isHost && (

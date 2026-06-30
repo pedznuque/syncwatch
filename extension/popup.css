@@ -5,9 +5,9 @@ h1, p { margin: 0; }
 h1 { font-size: 21px; }
 p, small { color: #9ca3af; line-height: 1.45; }
 label { display: grid; gap: 5px; color: #c7d2fe; font-size: 12px; font-weight: 700; }
-details { padding: 9px 10px; border: 1px solid #29324c; border-radius: 8px; background: #0f1629; }
-summary { color: #a5b4fc; font-size: 12px; font-weight: 700; cursor: pointer; }
-details label { margin-top: 9px; }
+.connection { display: grid; gap: 3px; padding: 10px; border: 1px solid #29324c; border-radius: 8px; background: #0f1629; }
+.connection span { color: #9ca3af; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.connection strong { color: #e0e7ff; font-size: 13px; }
 input, select, button { box-sizing: border-box; width: 100%; min-height: 38px; border: 1px solid #29324c; border-radius: 8px; padding: 8px 10px; background: #11182d; color: #f8fafc; }
 .toggle { display: flex; align-items: center; gap: 8px; }
 .toggle input { width: 17px; min-height: 17px; }
