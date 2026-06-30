@@ -436,6 +436,8 @@ export default function MediaPanel({ roomId, state, username, isHost, extensionR
           webUrl={webUrl}
           webState={webState}
           isHost={isHost}
+          username={username}
+          voice={voice}
         />
       ) : <div ref={playerContainerRef} className={isFullscreen ? "media-stage fullscreen" : "media-stage"}>
         {hasMedia && isHost && (

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { Download, FastForward, Pause, Play, Rewind } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, FastForward, Maximize2, Pause, Play, Rewind } from "lucide-react";
 import { SERVER_URL } from "../utils/socket.js";
+import FullscreenChatOverlay from "./FullscreenChatOverlay.jsx";
 
 function formatTime(value) {
   const seconds = Math.max(0, Math.floor(Number(value) || 0));
@@ -10,7 +11,13 @@ function formatTime(value) {
   return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${tail}` : `${minutes}:${tail}`;
 }
 
-export default function WebStreamPanel({ roomId, webUrl, webState, isHost }) {
+export default function WebStreamPanel({ roomId, webUrl, webState, isHost, username, voice }) {
+  const captureVideoRef = useRef(null);
+  const captureContainerRef = useRef(null);
+  const captureStreamRef = useRef(null);
+  const [captureActive, setCaptureActive] = useState(false);
+  const [captureStatus, setCaptureStatus] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [seeking, setSeeking] = useState(false);
   const [seekDraft, setSeekDraft] = useState(Number(webState?.currentTime || 0));
@@ -72,6 +79,77 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost }) {
     if (!seeking) setSeekDraft(liveTime);
   }, [liveTime, seeking]);
 
+  useEffect(() => {
+    const stopCapture = () => {
+      const stream = captureStreamRef.current;
+      captureStreamRef.current = null;
+      stream?.getTracks().forEach((track) => {
+        track.onended = null;
+        track.stop();
+      });
+      if (captureVideoRef.current) captureVideoRef.current.srcObject = null;
+      setCaptureActive(false);
+    };
+    const onCapture = async (event) => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      if (event.data?.type !== "syncwatch:tab-capture" || event.data.roomId !== roomId) return;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            mandatory: {
+              chromeMediaSource: "tab",
+              chromeMediaSourceId: event.data.streamId
+            }
+          },
+          video: {
+            mandatory: {
+              chromeMediaSource: "tab",
+              chromeMediaSourceId: event.data.streamId,
+              maxWidth: 3840,
+              maxHeight: 2160,
+              maxFrameRate: 60
+            }
+          }
+        });
+        stopCapture();
+        captureStreamRef.current = stream;
+        stream.getVideoTracks().forEach((track) => { track.contentHint = "detail"; track.onended = stopCapture; });
+        stream.getAudioTracks().forEach((track) => { track.contentHint = "music"; track.onended = stopCapture; });
+        if (captureVideoRef.current) {
+          captureVideoRef.current.srcObject = stream;
+          captureVideoRef.current.muted = false;
+          captureVideoRef.current.volume = 1;
+        }
+        const settings = stream.getVideoTracks()[0]?.getSettings?.() || {};
+        const resolution = settings.width && settings.height ? `${settings.width}x${settings.height}` : "source quality";
+        setCaptureActive(true);
+        const started = await captureVideoRef.current?.play().then(() => true).catch(() => false);
+        setCaptureStatus(started
+          ? `Playing locally in SyncWatch (${resolution})`
+          : `Capture connected at ${resolution}. Click the player once to enable playback.`);
+      } catch (error) {
+        setCaptureStatus(error?.message || "Chrome could not connect the captured tab.");
+      }
+    };
+    window.addEventListener("message", onCapture);
+    return () => {
+      window.removeEventListener("message", onCapture);
+      stopCapture();
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(document.fullscreenElement === captureContainerRef.current);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    if (!captureContainerRef.current) return;
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await captureContainerRef.current.requestFullscreen();
+  };
+
   const sendCommand = async (eventType, overrides = {}) => {
     if (!isHost || !hasLink) return;
     const commandId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -121,8 +199,17 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost }) {
       </div>
 
       <p className="web-stream-help">
-        The extension automatically opens or updates one stream window for this room. The host browser controls its detected video; everyone else follows as a viewer.
+        The extension automatically opens or updates one stream window. In that window, click the SyncWatch extension once and choose <strong>Show this video in SyncWatch</strong>.
       </p>
+
+      <div ref={captureContainerRef} className={isFullscreen ? "web-capture-frame fullscreen" : "web-capture-frame"} hidden={!captureActive}>
+        <video ref={captureVideoRef} autoPlay playsInline onClick={() => captureVideoRef.current?.play().catch(() => {})} />
+        <button className="web-capture-fullscreen" onClick={toggleFullscreen} title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+          <Maximize2 size={18} />
+        </button>
+        {isFullscreen && <FullscreenChatOverlay roomId={roomId} username={username} voice={voice} />}
+      </div>
+      {captureStatus && <p className="web-capture-status">{captureStatus}</p>}
 
       {hasLink && isHost && (
         <div className="web-remote-controls">
