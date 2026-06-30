@@ -5,7 +5,7 @@ const defaults = {
   role: "viewer",
   syncwatchLastStatus: "Extension is off"
 };
-const fields = Object.fromEntries(["serverUrl", "roomId", "role", "enabled", "status", "save", "openStream"].map((id) => [id, document.getElementById(id)]));
+const fields = Object.fromEntries(["serverUrl", "roomId", "role", "enabled", "status", "save", "openStream", "useThisTab"].map((id) => [id, document.getElementById(id)]));
 
 chrome.storage.local.get(defaults, (config) => {
   fields.serverUrl.value = config.serverUrl;
@@ -41,14 +41,22 @@ fields.openStream.addEventListener("click", async () => {
     return;
   }
   fields.status.textContent = "Finding the room stream...";
-  const response = await chrome.runtime.sendMessage({ type: "syncwatch:request", method: "GET", config });
-  const url = response?.data?.url;
-  if (!response?.ok || !url) {
+  const response = await chrome.runtime.sendMessage({ type: "syncwatch:open-stream-window", config });
+  if (!response?.ok) {
     fields.status.textContent = response?.error || "No stream link is set in this room.";
     return;
   }
-  await chrome.windows.create({ url, type: "popup", width: 1280, height: 800, focused: true });
   fields.status.textContent = "Stream window opened - waiting for video.";
+});
+
+fields.useThisTab.addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!Number.isInteger(tab?.id)) {
+    fields.status.textContent = "Could not select this tab.";
+    return;
+  }
+  const response = await chrome.runtime.sendMessage({ type: "syncwatch:set-controller-tab", tabId: tab.id });
+  fields.status.textContent = response?.ok ? "This tab is now the playback controller." : response?.error || "Could not select this tab.";
 });
 
 chrome.storage.onChanged.addListener((changes) => {

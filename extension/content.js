@@ -5,6 +5,7 @@ const DEFAULT_CONFIG = {
   role: "viewer"
 };
 const HOST_SOURCE_ID = `extension-host:${chrome.runtime.id}`;
+let hostSourceId = HOST_SOURCE_ID;
 
 let config = { ...DEFAULT_CONFIG };
 let activeVideo = null;
@@ -39,6 +40,7 @@ function findPrimaryVideo() {
 
 async function publish(eventType) {
   if (!config.enabled || config.role !== "host" || !activeVideo || Date.now() < suppressUntil) return;
+  lastPublished = Date.now();
   const response = await request("POST", {
     eventType,
     url: location.href,
@@ -50,6 +52,11 @@ async function publish(eventType) {
     sourceId: HOST_SOURCE_ID,
     playerDetected: true
   });
+  if (response?.ignored) {
+    setStatus("Another stream tab is the active controller.");
+    return;
+  }
+  if (response?.data?.sourceId) hostSourceId = response.data.sourceId;
   setStatus(response?.ok ? `Host connected - ${eventType}` : response?.error || "Cannot reach SyncWatch");
 }
 
@@ -94,7 +101,7 @@ function showPlaybackPrompt() {
 async function applyRemoteState(state) {
   if (!activeVideo || !state || state.seq <= lastSequence) return;
   lastSequence = state.seq;
-  if (config.role === "host" && state.sourceId === HOST_SOURCE_ID) return;
+  if (config.role === "host" && state.sourceId === hostSourceId) return;
   suppressUntil = Date.now() + 1200;
   const elapsed = state.paused ? 0 : Math.max(0, (Date.now() - Number(state.updatedAt || Date.now())) / 1000);
   const targetTime = Number(state.currentTime || 0) + elapsed * Number(state.playbackRate || 1);
@@ -121,13 +128,17 @@ function restart() {
   clearInterval(scanTimer);
   activeVideo = null;
   lastSequence = -1;
+  hostSourceId = HOST_SOURCE_ID;
   if (!config.enabled || !/^\d{6}$/.test(config.roomId)) {
     setStatus("Extension is off");
     return;
   }
   const scan = () => {
     const video = findPrimaryVideo();
-    if (video) bindVideo(video);
+    if (video) {
+      bindVideo(video);
+      if (config.role === "host" && activeVideo === video && Date.now() - lastPublished > 3000) publish("heartbeat");
+    }
     else setStatus("Connected - waiting for a video");
   };
   scan();

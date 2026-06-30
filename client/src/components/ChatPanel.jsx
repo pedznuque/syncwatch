@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Mic, MicOff, PhoneOff, Send, Users } from "lucide-react";
 import { socket } from "../utils/socket.js";
-import { useVoiceChat } from "../hooks/useVoiceChat.js";
 
-export default function ChatPanel({ roomId, username, initialMessages = [], users = [] }) {
+export default function ChatPanel({ roomId, username, initialMessages = [], users = [], voice }) {
   const [messages, setMessages] = useState(initialMessages);
   const [text, setText] = useState("");
   const [image, setImage] = useState(null);
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
-  const { voiceOn, muted, voiceStatus, joinVoice, leaveVoice, toggleMute, audioWrapRef } = useVoiceChat(roomId);
+  const { voiceOn, muted, voiceStatus, joinVoice, leaveVoice, toggleMute, audioWrapRef } = voice;
 
   useEffect(() => setMessages(initialMessages.slice(-100)), [initialMessages]);
 

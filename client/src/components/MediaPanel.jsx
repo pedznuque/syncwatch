@@ -39,7 +39,7 @@ function parseTime(value) {
   return null;
 }
 
-export default function MediaPanel({ roomId, state, username, isHost }) {
+export default function MediaPanel({ roomId, state, username, isHost, voice }) {
   const videoRef = useRef(null);
   const youtubeRef = useRef(null);
   const ytPlayerRef = useRef(null);
@@ -428,6 +428,8 @@ export default function MediaPanel({ roomId, state, username, isHost }) {
           webState={webState}
           isHost={isHost}
           isDesktop={isDesktop}
+          username={username}
+          voice={voice}
         />
       ) : <div ref={playerContainerRef} className={isFullscreen ? "media-stage fullscreen" : "media-stage"}>
         {hasMedia && isHost && (
@@ -510,7 +512,7 @@ export default function MediaPanel({ roomId, state, username, isHost }) {
             </div>
           </div>
         )}
-        {isFullscreen && <FullscreenChatOverlay roomId={roomId} username={username} />}
+        {isFullscreen && <FullscreenChatOverlay roomId={roomId} username={username} voice={voice} />}
       </div>}
     </section>
   );

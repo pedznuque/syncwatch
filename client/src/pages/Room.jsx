@@ -4,6 +4,7 @@ import { socket } from "../utils/socket.js";
 import MediaPanel from "../components/MediaPanel.jsx";
 import ChatPanel from "../components/ChatPanel.jsx";
 import InvitePanel from "../components/InvitePanel.jsx";
+import { useVoiceChat } from "../hooks/useVoiceChat.js";
 
 function saveRoomHistory(roomId, username) {
   const key = "syncwatch_room_history";
@@ -22,6 +23,7 @@ export default function Room() {
   const [roomState, setRoomState] = useState(null);
   const [users, setUsers] = useState([]);
   const [connected, setConnected] = useState(socket.connected);
+  const voice = useVoiceChat(roomId);
 
   useEffect(() => saveRoomHistory(roomId, username), [roomId, username]);
 
@@ -91,6 +93,7 @@ export default function Room() {
             state={roomState}
             username={username}
             isHost={canControl}
+            voice={voice}
           />
           <div className="below-player-grid streamlined-bottom">
             <InvitePanel roomId={roomId} users={users} onLeave={leaveRoom} isHost={isHost} hostSocketId={roomState?.hostSocketId} />
@@ -98,7 +101,7 @@ export default function Room() {
         </section>
 
         <aside className="chat-dock">
-          <ChatPanel roomId={roomId} username={username} initialMessages={roomState?.messages || []} users={users} />
+          <ChatPanel roomId={roomId} username={username} initialMessages={roomState?.messages || []} users={users} voice={voice} />
         </aside>
       </div>
     </main>

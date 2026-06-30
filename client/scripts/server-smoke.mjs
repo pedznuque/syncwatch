@@ -95,6 +95,40 @@ if (webSyncResponse.headers.get("access-control-allow-origin") !== "chrome-exten
   throw new Error("Extension web-sync endpoint failed");
 }
 
+const competingPlayerResponse = await fetch(`${baseUrl}/rooms/${created.roomId}/web-sync`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json", Origin: "chrome-extension://abcdefghijklmnopabcdefghijklmnop" },
+  body: JSON.stringify({
+    url: "https://www.bilibili.tv/",
+    currentTime: 99,
+    paused: true,
+    sourceId: "extension-host:competing-tab",
+    eventType: "pause",
+    playerDetected: true
+  })
+});
+const competingPlayerState = await competingPlayerResponse.json();
+if (competingPlayerResponse.status !== 202 || !competingPlayerState.ignored || competingPlayerState.currentTime !== 42) {
+  throw new Error("Competing extension player was not ignored");
+}
+
+const appCommandResponse = await fetch(`${baseUrl}/rooms/${created.roomId}/web-sync`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    url: "https://www.bilibili.tv/",
+    currentTime: 43,
+    paused: true,
+    sourceId: "syncwatch-app",
+    eventType: "pause"
+  })
+});
+const appCommandState = await appCommandResponse.json();
+if (!appCommandResponse.ok || !appCommandState.paused || appCommandState.currentTime !== 43
+  || appCommandState.playerSourceId !== "extension-host:smoke-test") {
+  throw new Error("SyncWatch player command did not preserve the active extension controller");
+}
+
 const hostVoicePeers = waitFor(host, "voice:peers");
 host.emit("voice:join", { roomId: created.roomId });
 if ((await hostVoicePeers).socketIds.length !== 0) throw new Error("Unexpected host voice peers");
