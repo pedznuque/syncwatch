@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { Download, ExternalLink, FastForward, MonitorPlay, Pause, Play, Rewind, SquareArrowOutUpRight } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, ExternalLink, FastForward, Maximize2, MonitorUp, Pause, Play, Rewind, Square } from "lucide-react";
 import { SERVER_URL } from "../utils/socket.js";
-import DesktopWebPlayer from "./DesktopWebPlayer.jsx";
+import FullscreenChatOverlay from "./FullscreenChatOverlay.jsx";
 
 function formatTime(value) {
   const seconds = Math.max(0, Math.floor(Number(value) || 0));
@@ -11,8 +11,13 @@ function formatTime(value) {
   return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${tail}` : `${minutes}:${tail}`;
 }
 
-export default function WebStreamPanel({ roomId, webUrl, webState, isHost, isDesktop }) {
-  const [showPreview, setShowPreview] = useState(false);
+export default function WebStreamPanel({ roomId, webUrl, webState, isHost, username, voice }) {
+  const mirrorVideoRef = useRef(null);
+  const mirrorContainerRef = useRef(null);
+  const mirrorStreamRef = useRef(null);
+  const [mirrorActive, setMirrorActive] = useState(false);
+  const [mirrorStatus, setMirrorStatus] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [seeking, setSeeking] = useState(false);
   const [seekDraft, setSeekDraft] = useState(Number(webState?.currentTime || 0));
@@ -20,7 +25,7 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, isDes
   const serverOrigin = SERVER_URL.replace(/\/+$/, "");
   const hasLink = Boolean(webUrl);
   const detected = Boolean(webState?.playerDetected)
-    && now - Number(webState?.updatedAt || 0) < 10_000;
+    && now - Number(webState?.playerUpdatedAt || webState?.updatedAt || 0) < 10_000;
   const isPlaying = detected && !webState?.paused;
   const duration = Number(webState?.duration || 0);
   const liveTime = useMemo(() => {
@@ -36,6 +41,51 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, isDes
   useEffect(() => {
     if (!seeking) setSeekDraft(liveTime);
   }, [liveTime, seeking]);
+
+  const stopMirror = () => {
+    const stream = mirrorStreamRef.current;
+    mirrorStreamRef.current = null;
+    stream?.getTracks().forEach((track) => {
+      track.onended = null;
+      track.stop();
+    });
+    if (mirrorVideoRef.current) mirrorVideoRef.current.srcObject = null;
+    setMirrorActive(false);
+    setMirrorStatus("Mirror stopped");
+  };
+
+  useEffect(() => () => {
+    mirrorStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(document.fullscreenElement === mirrorContainerRef.current);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const startMirror = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 30, max: 60 } },
+        audio: true
+      });
+      stopMirror();
+      mirrorStreamRef.current = stream;
+      if (mirrorVideoRef.current) mirrorVideoRef.current.srcObject = stream;
+      stream.getTracks().forEach((track) => { track.onended = stopMirror; });
+      setMirrorActive(true);
+      setMirrorStatus("Mirroring the selected stream window locally");
+    } catch (error) {
+      if (error?.name !== "NotAllowedError") setMirrorStatus("Window mirroring is unavailable in this browser");
+    }
+  };
+
+  const toggleFullscreen = async () => {
+    if (!mirrorContainerRef.current) return;
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await mirrorContainerRef.current.requestFullscreen();
+  };
 
   const sendCommand = async (eventType, overrides = {}) => {
     if (!isHost || !hasLink) return;
@@ -76,7 +126,7 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, isDes
     ? { tone: "idle", label: "No stream link set", detail: "Paste a streaming page URL above." }
     : detected
       ? { tone: "online", label: "Video detected", detail: `${webState?.title || "HTML5 video"} - ${isPlaying ? "playing" : "paused"}` }
-      : { tone: "waiting", label: "Link set - waiting for video", detail: "Open the stream with the extension enabled." };
+      : { tone: "waiting", label: "Link set - waiting for video", detail: "Open the stream and select its tab as the extension controller." };
 
   return (
     <div className="web-stream-workspace">
@@ -90,14 +140,15 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, isDes
           <Download size={17} /> Download extension
         </a>
         <button disabled={!hasLink} onClick={openStream}><ExternalLink size={17} /> Open stream window</button>
-        <button disabled={!hasLink} onClick={() => setShowPreview((value) => !value)}>
-          {showPreview ? <SquareArrowOutUpRight size={17} /> : <MonitorPlay size={17} />}
-          {showPreview ? "Hide from SyncWatch" : "Render in SyncWatch"}
-        </button>
+        {!mirrorActive ? (
+          <button disabled={!hasLink} onClick={startMirror}><MonitorUp size={17} /> Mirror stream window</button>
+        ) : (
+          <button onClick={stopMirror}><Square size={17} /> Stop mirror</button>
+        )}
       </div>
 
       <p className="web-stream-help">
-        The extension controls the separate stream window. Rendering inside SyncWatch is also available, but providers that block embedding must stay in the stream window.
+        Open the stream separately, then choose <strong>Mirror stream window</strong> and select that window or tab. This is a local mirror, not an iframe and not a broadcast to other viewers.
       </p>
 
       {hasLink && isHost && (
@@ -127,23 +178,14 @@ export default function WebStreamPanel({ roomId, webUrl, webState, isHost, isDes
         </div>
       )}
 
-      {showPreview && hasLink && (
-        isDesktop ? (
-          <DesktopWebPlayer roomId={roomId} url={webUrl} canControl={isHost} initialTime={webState?.currentTime} initialPlaying={!webState?.paused} />
-        ) : (
-          <div className="web-preview-frame">
-            <iframe
-              key={webUrl}
-              src={webUrl}
-              title="Synchronized web stream"
-              allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-presentation"
-              allowFullScreen
-            />
-            <p>If the provider blocks embedding, use <strong>Open stream window</strong>. The extension will still control it.</p>
-          </div>
-        )
-      )}
+      <div ref={mirrorContainerRef} className={isFullscreen ? "web-mirror-frame fullscreen" : "web-mirror-frame"} hidden={!mirrorActive}>
+        <video ref={mirrorVideoRef} autoPlay playsInline />
+        <button className="web-mirror-fullscreen" onClick={toggleFullscreen} title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+          <Maximize2 size={18} />
+        </button>
+        {isFullscreen && <FullscreenChatOverlay roomId={roomId} username={username} voice={voice} />}
+      </div>
+      {mirrorStatus && <p className="web-mirror-status">{mirrorStatus}</p>}
     </div>
   );
 }

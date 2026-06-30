@@ -81,6 +81,8 @@ function createRoom(ownerName = "Host", requestedRoomId = "") {
       sourceId: "",
       eventType: "idle",
       playerDetected: false,
+      playerSourceId: "",
+      playerUpdatedAt: 0,
       updatedAt: 0
     },
     voiceUsers: new Set(),
@@ -215,6 +217,14 @@ app.post("/rooms/:roomId/web-sync", (req, res) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, max)) : fallback;
   };
+  const now = Date.now();
+  const sourceId = String(req.body?.sourceId || "web").slice(0, 100);
+  const isPlayerUpdate = /^(extension-host|desktop-host)/.test(sourceId);
+  const hasOtherActivePlayer = isPlayerUpdate
+    && room.webSync.playerSourceId
+    && room.webSync.playerSourceId !== sourceId
+    && now - Number(room.webSync.playerUpdatedAt || 0) < 12_000;
+  if (hasOtherActivePlayer) return res.status(202).json({ ...room.webSync, ignored: true });
 
   room.webSync = {
     seq: room.webSync.seq + 1,
@@ -224,12 +234,14 @@ app.post("/rooms/:roomId/web-sync", (req, res) => {
     duration: number(req.body?.duration, room.webSync.duration, 60 * 60 * 24),
     paused: typeof req.body?.paused === "boolean" ? req.body.paused : room.webSync.paused,
     playbackRate: number(req.body?.playbackRate, room.webSync.playbackRate, 4) || 1,
-    sourceId: String(req.body?.sourceId || "web").slice(0, 100),
+    sourceId,
     eventType: String(req.body?.eventType || "sync").slice(0, 40),
     playerDetected: typeof req.body?.playerDetected === "boolean"
       ? req.body.playerDetected
       : Boolean(room.webSync.playerDetected),
-    updatedAt: Date.now()
+    playerSourceId: isPlayerUpdate ? sourceId : room.webSync.playerSourceId,
+    playerUpdatedAt: isPlayerUpdate ? now : room.webSync.playerUpdatedAt,
+    updatedAt: now
   };
 
   io.to(req.params.roomId).emit("web:state", room.webSync);
@@ -300,6 +312,8 @@ io.on("connection", (socket) => {
         sourceId: "syncwatch-link",
         eventType: "link-set",
         playerDetected: false,
+        playerSourceId: "",
+        playerUpdatedAt: 0,
         updatedAt: Date.now()
       };
       io.to(roomId).emit("web:state", room.webSync);

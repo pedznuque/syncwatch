@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Eye, EyeOff, MessageCircle, Send, X } from "lucide-react";
+import { Eye, EyeOff, MessageCircle, Mic, MicOff, PhoneOff, Send, X } from "lucide-react";
 import { socket } from "../utils/socket.js";
 
 const MESSAGE_LIFETIME = 11000;
 const LANE_COUNT = 9;
 
-export default function FullscreenChatOverlay({ roomId, username }) {
+export default function FullscreenChatOverlay({ roomId, username, voice }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [showInput, setShowInput] = useState(true);
@@ -39,6 +39,8 @@ export default function FullscreenChatOverlay({ roomId, username }) {
     socket.emit("chat:message", { roomId, username, text: cleanText });
     setText("");
   };
+  const voiceOn = Boolean(voice?.voiceOn);
+  const muted = Boolean(voice?.muted);
 
   return (
     <div className="fullscreen-danmaku-ui">
@@ -72,6 +74,14 @@ export default function FullscreenChatOverlay({ roomId, username }) {
             <button onClick={() => setShowComments((value) => !value)} title={showComments ? "Hide comments" : "Show comments"}>
               {showComments ? <Eye size={17} /> : <EyeOff size={17} />}
             </button>
+            {!voiceOn ? (
+              <button onClick={voice?.joinVoice} title="Join voice"><Mic size={17} /></button>
+            ) : (
+              <>
+                <button onClick={voice?.toggleMute} title={muted ? "Unmute" : "Mute"}>{muted ? <MicOff size={17} /> : <Mic size={17} />}</button>
+                <button onClick={voice?.leaveVoice} title="Leave voice"><PhoneOff size={17} /></button>
+              </>
+            )}
             <button onClick={() => setShowInput(false)} title="Hide comment input"><X size={17} /></button>
           </>
         ) : (
@@ -79,6 +89,9 @@ export default function FullscreenChatOverlay({ roomId, username }) {
             <button onClick={() => setShowInput(true)} title="Show comment input"><MessageCircle size={19} /></button>
             <button onClick={() => setShowComments((value) => !value)} title={showComments ? "Hide comments" : "Show comments"}>
               {showComments ? <Eye size={18} /> : <EyeOff size={18} />}
+            </button>
+            <button onClick={voiceOn ? voice?.toggleMute : voice?.joinVoice} title={voiceOn ? (muted ? "Unmute" : "Mute") : "Join voice"}>
+              {voiceOn && muted ? <MicOff size={18} /> : <Mic size={18} />}
             </button>
           </>
         )}

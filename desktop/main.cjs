@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, shell } = require("electron");
+const { app, BrowserWindow, desktopCapturer, session, shell } = require("electron");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
@@ -81,13 +81,18 @@ function createWindow() {
 app.userAgentFallback = CHROME_USER_AGENT;
 
 app.whenReady().then(async () => {
-  const allowedPermissions = new Set(["media", "fullscreen"]);
+  const allowedPermissions = new Set(["media", "display-capture", "fullscreen"]);
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     callback(isTrustedAppUrl(webContents.getURL()) && allowedPermissions.has(permission));
   });
   session.defaultSession.setPermissionCheckHandler((webContents, permission) => (
     isTrustedAppUrl(webContents?.getURL()) && allowedPermissions.has(permission)
   ));
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer.getSources({ types: ["window", "screen"] })
+      .then((sources) => callback(sources[0] ? { video: sources[0], audio: "loopback" } : {}))
+      .catch(() => callback({}));
+  }, { useSystemPicker: true });
   const window = createWindow();
   if (app.isPackaged) {
     const port = await startLocalAppServer();
